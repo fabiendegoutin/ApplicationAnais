@@ -1,6 +1,8 @@
 import streamlit as st
 from google import genai
 from google.genai import types
+from gtts import gTTS
+import io
 
 # ==============================
 # CONFIGURATION & DESIGN
@@ -10,41 +12,35 @@ st.set_page_config(page_title="Le Coach d'Anaïs 🌟", page_icon="🌈", layout
 st.markdown("""
     <style>
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; border: 1px solid #f0f2f6; }
-    .stButton>button { border-radius: 25px; font-weight: bold; transition: 0.3s; width: 100%; }
-    /* Style pour le conteneur de téléchargement au centre */
+    .stButton>button { border-radius: 25px; font-weight: bold; width: 100%; }
     .upload-container { background-color: #f9f9f9; padding: 20px; border-radius: 15px; border: 2px dashed #FFC107; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
-if "GEMINI_API_KEY" not in st.secrets:
-    st.error("Clé API manquante dans les Secrets Streamlit.")
-    st.stop()
-
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# ==============================
-# INITIALISATION DE LA SESSION
-# ==============================
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Coucou Anaïs ! 👋 Prête à t'entraîner pour ta classe de 6ème ? Envoie-moi tes photos juste en dessous ! ✨"}]
-if "xp" not in st.session_state: st.session_state.xp = 0
-if "quiz_en_cours" not in st.session_state: st.session_state.quiz_en_cours = False
+def text_to_speech(text):
+    tts = gTTS(text=text, lang='fr')
+    fp = io.BytesIO()
+    tts.write_to_fp(fp)
+    return fp
 
 # ==============================
-# SIDEBAR (Uniquement pour le Score)
+# INITIALISATION
+# ==============================
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "Coucou Anaïs ! 👋 Prends en photo ton cours pour commencer le défi ! ✨"}]
+if "xp" not in st.session_state: st.session_state.xp = 0
+if "quiz_en_cours" not in st.session_state: st.session_state.quiz_en_cours = False
+if "images_data" not in st.session_state: st.session_state.images_data = []
+
+# ==============================
+# SIDEBAR
 # ==============================
 with st.sidebar:
-    st.markdown("<h1 style='text-align: center;'>🚀 Progression</h1>", unsafe_allow_html=True)
-    st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #FFEB3B, #FFC107); padding: 20px; border-radius: 15px; text-align: center; color: black;'>
-            <h2 style='margin: 0;'>⭐ {st.session_state.xp} XP</h2>
-            <p style='margin: 0; font-weight: bold;'>Bravo Anaïs !</p>
-        </div>
-    """, unsafe_allow_html=True)
-    if st.button("🗑️ Recommencer tout"):
-        st.session_state.messages = [{"role": "assistant", "content": "C'est reparti ! 🎈"}]
-        st.session_state.quiz_en_cours = False
-        st.session_state.xp = 0
+    st.markdown(f"### ⭐ {st.session_state.xp} XP")
+    if st.button("🗑️ Recommencer"):
+        st.session_state.clear()
         st.rerun()
 
 # ==============================
@@ -52,72 +48,85 @@ with st.sidebar:
 # ==============================
 st.title("🌟 Mon Coach Magique")
 
-# On n'affiche la zone de téléchargement que si le quiz n'est pas déjà lancé 
-# ou on la laisse pour pouvoir rajouter des pages.
 with st.container():
     st.markdown('<div class="upload-container">', unsafe_allow_html=True)
-    uploaded_files = st.file_uploader("📸 Dépose tes photos de cours ici pour Anaïs", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+    # L'option "Camera" apparaît sur Samsung quand on clique sur "Browse files" 
+    # si le type est bien restreint aux images.
+    uploaded_files = st.file_uploader(
+        "📸 Prends une photo ou choisis une image", 
+        type=["png", "jpg", "jpeg"], 
+        accept_multiple_files=True
+    )
     
     if st.button("🚀 LANCER LE DÉFI QCM", type="primary"):
         if uploaded_files:
             st.session_state.quiz_en_cours = True
-            st.session_state.messages = [{"role": "assistant", "content": "C'est parti ! Je prépare tes questions... ⏳"}] 
+            st.session_state.messages = [{"role": "assistant", "content": "C'est parti ! J'analyse tes documents... ⏳"}] 
             st.session_state.first_run = True 
-            # On ne fait pas de rerun ici pour laisser la logique s'exécuter
+            # Sauvegarde des images en session pour ne pas les perdre
+            st.session_state.images_data = [f.getvalue() for f in uploaded_files]
+            st.session_state.mimes = [f.type for f in uploaded_files]
         else:
-            st.warning("Ajoute des photos de ton cours d'abord ! 😊")
+            st.warning("Il me faut une photo de ton cours ! 😊")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================
 # ZONE DE CHAT
 # ==============================
 for message in st.session_state.messages:
-    avatar = "👤" if message["role"] == "user" else "🌟"
-    with st.chat_message(message["role"], avatar=avatar):
+    with st.chat_message(message["role"], avatar=("👤" if message["role"] == "user" else "🌟")):
         st.markdown(message["content"])
         if message["role"] == "assistant":
-            with st.expander("🔊 Écouter"):
-                st.audio(f"https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=fr&q={message['content'].replace(' ', '+')}", format="audio/mp3")
+            if st.button("🔊 Écouter", key=f"audio_{hash(message['content'])}"):
+                audio_data = text_to_speech(message["content"])
+                st.audio(audio_data, format="audio/mp3", autoplay=True)
 
 # ==============================
 # LOGIQUE DU COACH
 # ==============================
 
-# 1. Lancement (Envoi des images)
 if st.session_state.quiz_en_cours and getattr(st.session_state, 'first_run', False):
     with st.chat_message("assistant", avatar="🌟"):
-        with st.spinner("Lecture du cours..."):
-            prompt_init = """Tu es un coach scolaire ultra encourageant pour Anaïs (élève de 6ème).
-            Pose la 1ère question en QCM (A, B ou C) basée uniquement sur les photos.
-            IMPORTANT : Saute une ligne entre chaque option A, B et C.
-            """
+        with st.spinner("Je lis ton cours très attentivement..."):
+            # PROMPT RENFORCÉ POUR LE FOCUS
+            prompt_init = """Tu es le coach scolaire d'Anaïs (6ème). 
+            CONSIGNE STRICTE : Pose une question QCM (A, B, C) basée UNIQUEMENT sur les informations présentes dans les images fournies. 
+            Ne pose pas de question de culture générale hors du document. 
+            Saute une ligne entre chaque option A, B et C.
+            Sois très encourageant !"""
+            
             contenu = [prompt_init]
-            for f in uploaded_files:
-                contenu.append(types.Part.from_bytes(data=f.getvalue(), mime_type=f.type))
+            for i in range(len(st.session_state.images_data)):
+                contenu.append(types.Part.from_bytes(data=st.session_state.images_data[i], mime_type=st.session_state.mimes[i]))
             
             response = client.models.generate_content(model="gemini-2.0-flash", contents=contenu)
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             st.session_state.first_run = False
             st.rerun()
 
-# 2. Réponses au Chat
-if prompt := st.chat_input("Ta réponse ici..."):
+if prompt := st.chat_input("Ta réponse (A, B, C)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     with st.chat_message("assistant", avatar="🌟"):
+        # On redonne les images dans le contexte pour que Gemini garde le focus
         instruction = f"""Anaïs a répondu : '{prompt}'. 
-        1. Félicite-la chaleureusement.
-        2. Si c'est faux, explique pédagogiquement en utilisant tes connaissances.
-        3. Pose la question suivante en QCM (A, B ou C).
-        Saute bien une ligne entre chaque option.
-        """
+        1. Vérifie par rapport au document fourni en photo. 
+        2. Félicite-la et explique si besoin.
+        3. Pose le prochain QCM (A, B, C) basé EXCLUSIVEMENT sur les images.
+        Sauts de ligne entre A, B et C."""
         
-        historique = [msg["content"] for msg in st.session_state.messages]
-        historique.append(instruction)
+        # On envoie les images + l'historique pour garder le focus
+        historique = [instruction]
+        for i in range(len(st.session_state.images_data)):
+            historique.append(types.Part.from_bytes(data=st.session_state.images_data[i], mime_type=st.session_state.mimes[i]))
         
+        # On ajoute les derniers échanges de texte
+        for msg in st.session_state.messages[-3:]: 
+            historique.append(msg["content"])
+
         response = client.models.generate_content(model="gemini-2.0-flash", contents=historique)
         
-        if "bravo" in response.text.lower() or "super" in response.text.lower():
+        if any(word in response.text.lower() for word in ["bravo", "super", "génial", "juste"]):
             st.balloons()
             st.session_state.xp += 20
         
