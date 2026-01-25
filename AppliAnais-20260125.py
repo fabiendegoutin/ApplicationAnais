@@ -7,11 +7,12 @@ from google.genai import types
 # ==============================
 st.set_page_config(page_title="Le Coach d'Anaïs 🌟", page_icon="🌈", layout="centered")
 
-# Style personnalisé
 st.markdown("""
     <style>
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; border: 1px solid #f0f2f6; }
     .stButton>button { border-radius: 25px; font-weight: bold; transition: 0.3s; }
+    /* Amélioration de l'espacement pour mobile */
+    .stMarkdown p { line-height: 1.6; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,12 +68,19 @@ for message in st.session_state.messages:
 # LOGIQUE DU COACH
 # ==============================
 
+# 1. Lancement du quiz avec consigne d'espacement
 if st.session_state.quiz_en_cours and getattr(st.session_state, 'first_run', False):
     with st.chat_message("assistant", avatar="🌟"):
         with st.spinner("Anaïs, je prépare tes questions... ✨"):
-            prompt_init = """Tu es un coach scolaire ultra encourageant pour Anaïs, une élève de 6ème.
-            Analyse les photos. Pose la 1ère question en QCM (A, B ou C). 
-            Important : Les questions doivent porter UNIQUEMENT sur le cours en photo.
+            prompt_init = """Tu es un coach scolaire ultra encourageant pour Anaïs (élève de 6ème).
+            Pose la 1ère question en QCM (A, B ou C) basée uniquement sur les photos.
+            IMPORTANT : Saute impérativement une ligne entre chaque option (A, B et C) pour que ce soit aéré.
+            Exemple :
+            A) Choix 1
+            
+            B) Choix 2
+            
+            C) Choix 3
             """
             contenu = [prompt_init]
             for f in uploaded_files:
@@ -83,14 +91,16 @@ if st.session_state.quiz_en_cours and getattr(st.session_state, 'first_run', Fal
             st.session_state.first_run = False
             st.rerun()
 
+# 2. Réponse et suite du quiz
 if prompt := st.chat_input("Réponds ici (A, B ou C)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     with st.chat_message("assistant", avatar="🌟"):
         instruction = f"""Anaïs a répondu : '{prompt}'. 
-        1. Félicite-la. Si c'est juste, dis 'BRAVO Anaïs !' et utilise des emojis de fête.
-        2. Si c'est faux, explique avec douceur en utilisant tes connaissances pour l'aider à comprendre.
-        3. Pose la question suivante en QCM (A, B ou C) basée sur le cours.
+        1. Félicite-la (BRAVO Anaïs ! + emojis si juste).
+        2. Explique avec douceur si c'est faux.
+        3. Pose la question suivante en QCM (A, B ou C).
+        IMPORTANT : Saute bien une ligne entre chaque option A, B et C pour la lisibilité.
         """
         
         historique = [msg["content"] for msg in st.session_state.messages]
@@ -98,7 +108,6 @@ if prompt := st.chat_input("Réponds ici (A, B ou C)..."):
         
         response = client.models.generate_content(model="gemini-2.0-flash", contents=historique)
         
-        # Effet visuel si c'est correct (on cherche "bravo" dans la réponse)
         if "bravo" in response.text.lower():
             st.balloons()
             st.session_state.xp += 20
