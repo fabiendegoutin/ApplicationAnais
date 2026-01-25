@@ -7,7 +7,6 @@ from google.genai import types
 # ==============================
 st.set_page_config(page_title="Mon Coach Magique", page_icon="🎓")
 
-# Initialisation du client Gemini
 if "GEMINI_API_KEY" not in st.secrets:
     st.error("Configurez GEMINI_API_KEY dans les secrets.")
     st.stop()
@@ -15,66 +14,68 @@ if "GEMINI_API_KEY" not in st.secrets:
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ==============================
-# GESTION DU CHAT ET DE LA SESSION
+# GESTION DE LA SESSION (MÉMOIRE)
 # ==============================
-# On initialise l'historique des messages
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Coucou ! Je suis ton coach. Envoie-moi une photo de ton cours pour commencer le défi ! 📸"}
+        {"role": "assistant", "content": "Coucou ! Envoie-moi une photo de ton cours pour commencer ! 📸"}
     ]
 
+if "xp" not in st.session_state: st.session_state.xp = 0
+# Cette variable va mémoriser si on a déjà traité les images en cours
+if "images_traitees" not in st.session_state: st.session_state.images_traitees = False
+
 # ==============================
-# SIDEBAR (Score et Photos)
+# SIDEBAR
 # ==============================
 with st.sidebar:
     st.title("🏆 Score")
-    if "xp" not in st.session_state: st.session_state.xp = 0
     st.metric("Points XP", f"{st.session_state.xp}")
-    
     st.divider()
-    # Zone de téléchargement dans la barre latérale pour libérer l'espace chat
+    
     uploaded_files = st.file_uploader(
         "Ajouter une photo du cours", 
         type=["png", "jpg", "jpeg"], 
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        key="file_uploader" # On ajoute une clé pour pouvoir le manipuler
     )
+    
+    if st.button("Réinitialiser tout"):
+        st.session_state.messages = [{"role": "assistant", "content": "C'est reparti !"}]
+        st.session_state.images_traitees = False
+        st.rerun()
 
 # ==============================
 # ZONE DE CHAT
 # ==============================
-# Affichage des messages existants
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Entrée utilisateur (Chat Input)
 if prompt := st.chat_input("Réponds ici..."):
-    # 1. Afficher le message de l'utilisateur
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. Préparer la réponse de Gemini
     with st.chat_message("assistant"):
         with st.spinner("Je réfléchis..."):
             
-            # Construction du contenu (Texte + Images si présentes)
-            instruction = f"""Tu es un coach bienveillant pour un enfant. 
-            Si l'utilisateur envoie des photos, crée un quiz de 3 questions.
-            Si l'utilisateur répond, corrige-le avec douceur et emojis.
-            Réponse de l'enfant : {prompt}"""
-            
+            # 1. Construction du prompt
+            instruction = f"Tu es un coach scolaire. Réponds à l'enfant. S'il y a des images, utilise-les pour créer un quiz. Réponse de l'enfant : {prompt}"
             contenu_multimodal = [instruction]
             
-            # On ajoute les images seulement si elles viennent d'être chargées
-            if uploaded_files:
+            # 2. OPTIMISATION AUTOMATIQUE DES TOKENS
+            # On n'envoie les images que SI elles sont dans l'uploader ET qu'elles n'ont pas encore été traitées
+            # OU si c'est le tout premier message avec ces images.
+            if uploaded_files and not st.session_state.images_traitees:
                 for f in uploaded_files:
                     contenu_multimodal.append(
                         types.Part.from_bytes(data=f.getvalue(), mime_type=f.type)
                     )
-
+                # On marque les images comme "envoyées" pour le prochain tour
+                st.session_state.images_traitees = True
+            
             try:
-                # Appel API Gemini
                 response = client.models.generate_content(
                     model="gemini-2.0-flash",
                     contents=contenu_multimodal
@@ -82,15 +83,8 @@ if prompt := st.chat_input("Réponds ici..."):
                 
                 reponse_texte = response.text
                 st.markdown(reponse_texte)
-                
-                # Sauvegarde dans l'historique
                 st.session_state.messages.append({"role": "assistant", "content": reponse_texte})
-                st.session_state.xp += 10 # Gain de points pour chaque interaction
+                st.session_state.xp += 10
                 
             except Exception as e:
-                st.error(f"Oups, petite erreur : {e}")
-
-# Bouton pour recommencer à zéro
-if st.sidebar.button("Réinitialiser la discussion"):
-    st.session_state.messages = [{"role": "assistant", "content": "C'est reparti ! Envoie-moi tes photos."}]
-    st.rerun()
+                st.error(f"Erreur : {e}")
