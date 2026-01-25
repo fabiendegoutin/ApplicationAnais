@@ -3,6 +3,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 from datetime import datetime
+import io
 
 # ==============================
 # CONFIG STREAMLIT (OBLIGATOIRE EN PREMIER)
@@ -161,6 +162,7 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
 
 
