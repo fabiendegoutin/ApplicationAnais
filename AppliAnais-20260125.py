@@ -11,7 +11,7 @@ else:
 genai.configure(api_key=API_KEY)
 
 # On utilise le modèle qui est présent dans votre liste
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 st.set_page_config(page_title="Le Coach d'Anaïs", page_icon="🎓")
 
@@ -46,3 +46,4 @@ if photos:
                 st.error(f"Erreur : {e}")
 
 st.sidebar.metric("XP", f"{st.session_state.xp} pts")
+
