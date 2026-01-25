@@ -134,7 +134,7 @@ RÈGLES IMPORTANTES :
                 ajouter_xp(20)
                 st.rerun()
 
-            except Exception:
+            except Exception as e:
                 st.error(e)
                 #st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
 
@@ -155,4 +155,5 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
