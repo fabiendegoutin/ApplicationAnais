@@ -3,7 +3,7 @@ from google import genai
 from google.genai import types
 
 # ==============================
-# CONFIGURATION
+# CONFIGURATION & CLIENT
 # ==============================
 st.set_page_config(page_title="Mon Coach Magique", page_icon="🎓")
 
@@ -14,16 +14,12 @@ if "GEMINI_API_KEY" not in st.secrets:
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ==============================
-# GESTION DE LA SESSION (MÉMOIRE)
+# INITIALISATION DE LA SESSION
 # ==============================
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Coucou ! Envoie-moi une photo de ton cours pour commencer ! 📸"}
-    ]
-
+    st.session_state.messages = [{"role": "assistant", "content": "Coucou ! Prête pour un nouveau défi ? Envoie tes photos et clique sur le bouton ! 📸"}]
 if "xp" not in st.session_state: st.session_state.xp = 0
-# Cette variable va mémoriser si on a déjà traité les images en cours
-if "images_traitees" not in st.session_state: st.session_state.images_traitees = False
+if "quiz_en_cours" not in st.session_state: st.session_state.quiz_en_cours = False
 
 # ==============================
 # SIDEBAR
@@ -33,58 +29,73 @@ with st.sidebar:
     st.metric("Points XP", f"{st.session_state.xp}")
     st.divider()
     
-    uploaded_files = st.file_uploader(
-        "Ajouter une photo du cours", 
-        type=["png", "jpg", "jpeg"], 
-        accept_multiple_files=True,
-        key="file_uploader" # On ajoute une clé pour pouvoir le manipuler
-    )
+    uploaded_files = st.file_uploader("Photos du cours", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
     
-    if st.button("Réinitialiser tout"):
+    # BOUTON POUR LANCER LE QUIZ
+    if st.button("🚀 LANCER LE DÉFI", use_container_width=True):
+        if uploaded_files:
+            st.session_state.quiz_en_cours = True
+            st.session_state.messages = [] # On nettoie pour le nouveau quiz
+            st.session_state.first_run = True # Flag pour envoyer les images
+        else:
+            st.warning("Ajoute des photos d'abord !")
+
+    if st.button("Réinitialiser"):
         st.session_state.messages = [{"role": "assistant", "content": "C'est reparti !"}]
-        st.session_state.images_traitees = False
+        st.session_state.quiz_en_cours = False
         st.rerun()
 
 # ==============================
-# ZONE DE CHAT
+# ZONE DE CHAT & AUDIO
 # ==============================
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        # Bouton audio pour les messages de l'assistant
+        if message["role"] == "assistant":
+            st.audio(f"https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=fr&q={message['content'].replace(' ', '+')}", format="audio/mp3")
 
-if prompt := st.chat_input("Réponds ici..."):
+# ==============================
+# LOGIQUE DU COACH
+# ==============================
+# 1. Si on vient de cliquer sur "Lancer le défi"
+if st.session_state.quiz_en_cours and getattr(st.session_state, 'first_run', False):
+    with st.chat_message("assistant"):
+        with st.spinner("Lecture du cours..."):
+            prompt_init = "Tu es un coach scolaire. Analyse ces images et pose UNIQUEMENT la première question d'un quiz interactif. Propose des choix A, B, C. Attends ma réponse avant de passer à la suite."
+            
+            contenu = [prompt_init]
+            for f in uploaded_files:
+                contenu.append(types.Part.from_bytes(data=f.getvalue(), mime_type=f.type))
+            
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=contenu)
+            st.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.session_state.first_run = False
+            st.rerun()
+
+# 2. Gestion des réponses de l'enfant
+if prompt := st.chat_input("Ta réponse (A, B, C...)"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Je réfléchis..."):
+        with st.spinner("Vérification..."):
+            # On envoie l'historique texte pour que Gemini sache où on en est (sans renvoyer les images)
+            instruction = f"""Voici la réponse de l'enfant : '{prompt}'. 
+            1. Dis si c'est correct ou non. 
+            2. Explique pourquoi simplement avec des emojis. 
+            3. Pose ensuite la question suivante (une seule).
+            Si c'était la dernière, félicite-le chaleureusement."""
             
-            # 1. Construction du prompt
-            instruction = f"Tu es un coach scolaire. Réponds à l'enfant. S'il y a des images, utilise-les pour créer un quiz. Réponse de l'enfant : {prompt}"
-            contenu_multimodal = [instruction]
+            # On construit l'historique pour le contexte
+            historique_texte = [msg["content"] for msg in st.session_state.messages]
+            historique_texte.append(instruction)
             
-            # 2. OPTIMISATION AUTOMATIQUE DES TOKENS
-            # On n'envoie les images que SI elles sont dans l'uploader ET qu'elles n'ont pas encore été traitées
-            # OU si c'est le tout premier message avec ces images.
-            if uploaded_files and not st.session_state.images_traitees:
-                for f in uploaded_files:
-                    contenu_multimodal.append(
-                        types.Part.from_bytes(data=f.getvalue(), mime_type=f.type)
-                    )
-                # On marque les images comme "envoyées" pour le prochain tour
-                st.session_state.images_traitees = True
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=historique_texte)
             
-            try:
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=contenu_multimodal
-                )
-                
-                reponse_texte = response.text
-                st.markdown(reponse_texte)
-                st.session_state.messages.append({"role": "assistant", "content": reponse_texte})
-                st.session_state.xp += 10
-                
-            except Exception as e:
-                st.error(f"Erreur : {e}")
+            st.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.session_state.xp += 15
+            st.rerun()
