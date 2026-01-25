@@ -1,49 +1,136 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from PIL import Image
+from datetime import datetime
 
-# --- CONFIGURATION ---
-if "GEMINI_API_KEY" in st.secrets:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
-else:
-    API_KEY = "VOTRE_CLE_API"
+# ==============================
+# CONFIG STREAMLIT (OBLIGATOIRE EN PREMIER)
+# ==============================
+st.set_page_config(page_title="Mon Coach Magique", page_icon="🎓")
 
-genai.configure(api_key=API_KEY)
+# ==============================
+# CONFIGURATION DE L'IA
+# ==============================
+# 👉 Sur Streamlit Cloud, ajoute ta clé dans Settings > Secrets :
+# GEMINI_API_KEY = "ta_cle_api"
+API_KEY = st.secrets["GEMINI_API_KEY"]
 
-# On utilise le modèle qui est présent dans votre liste
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+gclient = genai.Client(api_key=API_KEY)
+model = genai.GenerativeModel("gemini-2.0-flash")
 
-st.set_page_config(page_title="Le Coach d'Anaïs", page_icon="🎓")
-
-if 'xp' not in st.session_state:
+# ==============================
+# SESSION STATE
+# ==============================
+if "xp" not in st.session_state:
     st.session_state.xp = 0
+if "badges" not in st.session_state:
+    st.session_state.badges = []
+if "historique" not in st.session_state:
+    st.session_state.historique = []
+if "dernier_quiz" not in st.session_state:
+    st.session_state.dernier_quiz = None
+if "chapitre_nom" not in st.session_state:
+    st.session_state.chapitre_nom = "Mon Cours"
 
-st.title("🎓 Le Coach Magique d'Anaïs")
+def ajouter_xp(montant):
+    st.session_state.xp += montant
+    if st.session_state.xp >= 100 and "🚀 Apprenti" not in st.session_state.badges:
+        st.session_state.badges.append("🚀 Apprenti")
+    if st.session_state.xp >= 300 and "👑 Champion" not in st.session_state.badges:
+        st.session_state.badges.append("👑 Champion")
 
-# --- CAMERA / PHOTOS ---
-photos = st.file_uploader("Prends tes leçons en photo :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+# ==============================
+# SIDEBAR
+# ==============================
+with st.sidebar:
+    st.title("🏆 Mon Score")
+    st.metric("Total XP", f"{st.session_state.xp} pts")
 
-if photos:
-    images_pretes = []
-    for p in photos:
-        img = Image.open(p)
-        img.thumbnail((800, 800))
-        images_pretes.append(img)
-    
-    st.image(images_pretes, width=150)
+    st.subheader("🏅 Mes Badges")
+    if not st.session_state.badges:
+        st.write("Encore aucun badge 🌱")
+    for b in st.session_state.badges:
+        st.success(b)
 
-    if st.button("Lancer le défi ! ✨"):
-        with st.spinner("L'IA analyse tes photos..."):
-            prompt = "Tu es un coach scolaire. Crée un quiz de 3 questions courtes sur ces photos. Donne les réponses à la fin."
+    st.divider()
+    st.subheader("📜 Historique")
+    if not st.session_state.historique:
+        st.write("Aucun chapitre validé.")
+    else:
+        for item in st.session_state.historique:
+            st.info(f"✅ {item['titre']}\n\n*{item['date']}*")
+
+    st.divider()
+    st.subheader("⚙️ Réglages")
+    niveau = st.selectbox("Niveau", ["Primaire", "Collège", "Lycée"])
+    mode_tdah = st.checkbox("Aide au Focus (TDAH)", value=True)
+    mode_confiance = st.checkbox("Encouragement +", value=True)
+
+# ==============================
+# INTERFACE PRINCIPALE
+# ==============================
+st.title("🌟 Ton Assistant d'Étude")
+st.write("Transforme tes photos de cours en un défi amusant !")
+
+uploaded_files = st.file_uploader(
+    "Prends tes photos de cours ici 📸",
+    type=["png", "jpg", "jpeg"],
+    accept_multiple_files=True
+)
+
+if uploaded_files:
+    # Optimisation des images (anti-bug Gemini)
+    images = []
+    for f in uploaded_files:
+        img = Image.open(f)
+        img.thumbnail((1024, 1024))
+        images.append(img)
+
+    st.image(images, width=120)
+
+    st.session_state.chapitre_nom = st.text_input(
+        "Comment s'appelle ce chapitre ?",
+        st.session_state.chapitre_nom
+    )
+
+    if st.button("Lancer le défi ✨"):
+        with st.spinner("Je lis ton cours avec attention..."):
+            prompt = f"""
+Tu es un coach bienveillant pour un enfant ({niveau}).
+Analyse ces photos de cours.
+
+Crée 3 questions courtes et ludiques.
+
+CONSIGNES :
+- {"Utilise des phrases très courtes et des emojis." if mode_tdah else ""}
+- {"Commence par dire que le cours est intéressant. En cas d'erreur, donne un indice doux." if mode_confiance else ""}
+- Ne sois jamais sévère.
+- Donne les solutions à la fin.
+"""
+
             try:
-                # Appel standard
-                response = model.generate_content([prompt] + images_pretes)
-                st.markdown("### 📝 Ton Défi :")
-                st.write(response.text)
-                st.session_state.xp += 20
-                st.balloons()
+                content = [prompt] + images
+                response = model.generate_content(content)
+                st.session_state.dernier_quiz = response.text
+                ajouter_xp(20)
+                st.rerun()
             except Exception as e:
-                st.error(f"Erreur : {e}")
+                st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
 
-st.sidebar.metric("XP", f"{st.session_state.xp} pts")
+# ==============================
+# AFFICHAGE DU QUIZ
+# ==============================
+if st.session_state.dernier_quiz:
+    st.markdown("---")
+    st.markdown(st.session_state.dernier_quiz)
 
+    if st.button("J'ai terminé le défi 🏁"):
+        st.session_state.historique.append({
+            "titre": st.session_state.chapitre_nom,
+            "date": datetime.now().strftime("%d/%m/%Y %H:%M")
+        })
+        ajouter_xp(50)
+        st.session_state.dernier_quiz = None
+        st.balloons()
+        st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
+        st.rerun()
