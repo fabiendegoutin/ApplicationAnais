@@ -112,23 +112,27 @@ CONSIGNES :
 - Ne sois jamais sévère.
 - Donne les solutions à la fin.
 """
-
+            
             try:
-                parts = [types.Part.from_text(prompt)]
-                
+                parts = [types.Part(text=prompt)]
+            
                 for img in images:
-                    parts.append(types.Part.from_image(img))
-                
+                    parts.append(types.Part(image=img))
+            
                 response = client.models.generate_content(
                     model=MODEL_ID,
                     contents=parts
                 )
-                
-                st.session_state.dernier_quiz = response.candidates[0].content.parts[0].text
+            
+                st.session_state.dernier_quiz = (
+                    response.candidates[0].content.parts[0].text
+                )
+            
                 ajouter_xp(20)
                 st.rerun()
+            
             except Exception as e:
-                st.exception(e)
+                st.exception(e)  # garde ceci pour tester
                 #st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
 
 # ==============================
@@ -148,6 +152,7 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
 
 
