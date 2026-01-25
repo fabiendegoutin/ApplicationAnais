@@ -5,66 +5,64 @@ from gtts import gTTS
 import io
 
 # ==============================
-# CONFIGURATION & STYLE LARGE
+# CONFIGURATION & STYLE
 # ==============================
-st.set_page_config(page_title="Coach Magique 🌟", page_icon="🌈", layout="wide")
+st.set_page_config(page_title="Coach Magique d'Anaïs 🌟", page_icon="🌈", layout="wide")
 
 st.markdown("""
     <style>
-    /* Force la taille du texte pour mobile */
     html, body, [class*="st-"] { font-size: 18px; }
     .stChatMessage { border-radius: 15px; margin-bottom: 15px; border: 1px solid #ddd; }
-    /* Gros boutons pour les pouces */
-    .stButton>button { 
-        border-radius: 30px; 
-        height: 70px !important; 
-        font-size: 20px !important; 
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-    }
-    /* Zone de téléchargement plus visible */
+    .stButton>button { border-radius: 30px; height: 60px !important; font-size: 20px !important; width: 100%; }
     .stFileUploader section { background-color: #fff9e6; border: 2px dashed #ffc107; border-radius: 20px; padding: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
+# Initialisation du modèle avec le nom complet pour éviter l'erreur NotFound
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("Clé API manquante dans les Secrets Streamlit.")
+    st.stop()
+
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
+
+# Utilisation du nom de modèle explicite
+MODEL_NAME = 'models/gemini-1.5-flash'
+model = genai.GenerativeModel(model_name=MODEL_NAME)
 
 # ==============================
 # MÉMOIRE DE LA SESSION
 # ==============================
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Coucou Anaïs ! 👋 Prends en photo toutes les pages de ton cours de 6ème et on commence !"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Coucou Anaïs ! 👋 Prends en photo tes leçons et on commence !"}]
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "quiz_en_cours" not in st.session_state: st.session_state.quiz_en_cours = False
 if "mes_photos" not in st.session_state: st.session_state.mes_photos = []
 
 # ==============================
-# INTERFACE D'ACCUEIL (MULTI-PAGES)
+# INTERFACE D'ACCUEIL
 # ==============================
 st.markdown("<h1 style='text-align: center;'>🌟 Mon Coach Magique</h1>", unsafe_allow_html=True)
 
 if not st.session_state.quiz_en_cours:
-    st.write(f"### ⭐ Ton score : {st.session_state.xp} XP")
+    st.write(f"### ⭐ Score d'Anaïs : {st.session_state.xp} XP")
     
-    # Le secret pour Android : le file_uploader permet de choisir "Appareil photo"
-    # et d'utiliser la caméra arrière une fois ouvert.
     fichiers = st.file_uploader(
-        "📸 CLIQUE ICI POUR PRENDRE TES PHOTOS", 
+        "📸 PRENDS TES PHOTOS ICI", 
         type=["jpg", "jpeg", "png"], 
-        accept_multiple_files=True,
-        help="Tu peux prendre une photo, puis recommencer pour la page suivante !"
+        accept_multiple_files=True
     )
     
     if fichiers:
-        st.session_state.mes_photos = [Image.open(f) for f in fichiers]
-        st.success(f"✅ {len(fichiers)} page(s) enregistrée(s) !")
+        # Optimisation des images pour éviter de saturer l'envoi
+        st.session_state.mes_photos = []
+        for f in fichiers:
+            img = Image.open(f)
+            if img.mode != 'RGB': img = img.convert('RGB')
+            st.session_state.mes_photos.append(img)
+            
+        st.success(f"✅ {len(fichiers)} page(s) prête(s) !")
         
-        # On affiche les miniatures pour vérifier
-        cols = st.columns(len(fichiers) if len(fichiers) < 4 else 4)
-        for idx, img in enumerate(st.session_state.mes_photos):
-            cols[idx % 4].image(img, caption=f"Page {idx+1}", use_container_width=True)
-
-        if st.button("🚀 LANCER LE DÉFI MAINTENANT", type="primary"):
+        if st.button("🚀 LANCER LE QUIZ", type="primary"):
             st.session_state.quiz_en_cours = True
             st.session_state.first_run = True
             st.rerun()
@@ -73,10 +71,9 @@ if not st.session_state.quiz_en_cours:
 # ZONE DU QUIZ
 # ==============================
 if st.session_state.quiz_en_cours:
-    st.markdown(f"**📖 Étude de {len(st.session_state.mes_photos)} page(s) de cours**")
-    
     for i, msg in enumerate(st.session_state.messages):
-        with st.chat_message(msg["role"], avatar=("👤" if msg["role"] == "user" else "🌟")):
+        avatar = "👤" if msg["role"] == "user" else "🌟"
+        with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
             if msg["role"] == "assistant":
                 if st.button("🔊 Écouter", key=f"btn_{i}"):
@@ -90,29 +87,31 @@ if st.session_state.quiz_en_cours:
         st.rerun()
 
 # ==============================
-# LOGIQUE IA (VERROUILLÉE SUR IMAGES)
+# LOGIQUE IA (CORRECTION NOTFOUND)
 # ==============================
 if st.session_state.quiz_en_cours:
-    # Si le dernier message est de l'utilisateur ou si c'est le début
-    dernier_role = st.session_state.messages[-1]["role"]
-    
-    if st.session_state.first_run or dernier_role == "user":
+    if st.session_state.first_run or st.session_state.messages[-1]["role"] == "user":
         with st.chat_message("assistant", avatar="🌟"):
-            with st.spinner("Je réfléchis... ✨"):
-                if st.session_state.first_run:
-                    consigne = "Tu es le coach d'Anaïs (6ème). Analyse TOUTES les pages fournies. Pose la 1ère question QCM (A, B, C) sur le cours. Saute une ligne entre chaque choix."
-                    st.session_state.first_run = False
-                else:
-                    rep = st.session_state.messages[-1]["content"]
-                    consigne = f"Anaïs a répondu '{rep}'. Vérifie sur les photos. Félicite-la (Bravo Anaïs !) et pose le prochain QCM basé sur les photos. Saute des lignes."
-                
-                # Envoi des images + consigne
-                contenu = [consigne] + st.session_state.mes_photos
-                response = model.generate_content(contenu)
-                
-                if "bravo" in response.text.lower():
-                    st.balloons()
-                    st.session_state.xp += 20
-                
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                st.rerun()
+            with st.spinner("Je regarde tes photos... ✨"):
+                try:
+                    if st.session_state.first_run:
+                        consigne = "Tu es le coach d'Anaïs (6ème). Analyse ces photos. Pose la 1ère question QCM (A, B, C) basée UNIQUEMENT sur ces documents. Saute une ligne entre A, B et C."
+                        st.session_state.first_run = False
+                    else:
+                        rep = st.session_state.messages[-1]["content"]
+                        consigne = f"Anaïs a répondu '{rep}'. Vérifie sur les photos. Félicite-la et pose le prochain QCM basé sur les photos. Saute des lignes."
+                    
+                    # Construction du contenu robuste
+                    contenu_final = [consigne] + st.session_state.mes_photos
+                    
+                    # Appel au modèle
+                    response = model.generate_content(contenu_final)
+                    
+                    if any(w in response.text.lower() for w in ["bravo", "super", "juste"]):
+                        st.balloons()
+                        st.session_state.xp += 20
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Désolé Anaïs, j'ai eu un petit bug : {e}")
