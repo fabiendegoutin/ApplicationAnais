@@ -4,93 +4,89 @@ from PIL import Image
 from gtts import gTTS
 import io
 
-# --- CONFIGURATION ÉCRAN LARGE ---
-st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="wide")
+# Configuration large pour mobile
+st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 
+# Design des boutons pour les doigts d'un enfant
 st.markdown("""
     <style>
-    .stButton>button { border-radius: 20px; height: 3em; font-weight: bold; width: 100%; }
-    .stChatMessage { border-radius: 15px; }
+    .stButton>button { border-radius: 20px; height: 3.5em; font-size: 1.2rem !important; width: 100%; background-color: #FFC107; color: black; border: none; }
+    .stChatMessage { border-radius: 15px; font-size: 1.1rem; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONNEXION IA ---
+# Connexion sécurisée
 if "GEMINI_API_KEY" not in st.secrets:
     st.error("Clé API manquante dans les Secrets.")
     st.stop()
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-# Utilisation du modèle 1.5 Flash (le meilleur pour les photos mobiles)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- INITIALISATION ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "xp" not in st.session_state:
-    st.session_state.xp = 0
-if "photos_data" not in st.session_state:
-    st.session_state.photos_data = []
+# --- PERSISTENCE DES DONNÉES ---
+if "xp" not in st.session_state: st.session_state.xp = 0
+if "messages" not in st.session_state: st.session_state.messages = []
+if "stock_photos" not in st.session_state: st.session_state.stock_photos = []
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🌟 Le Coach Magique d'Anaïs")
+# --- INTERFACE ---
+st.title("🌟 Mon Coach Magique")
+st.write(f"### ⭐ Score : {st.session_state.xp} XP")
 
-# Zone de téléchargement
-with st.expander("📸 CLIQUE ICI POUR AJOUTER TES PHOTOS", expanded=not st.session_state.photos_data):
-    uploaded_files = st.file_uploader("Prends tes pages de cours en photo", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
-    
-    if uploaded_files:
-        # Stockage robuste : on transforme les photos en format compris par Google
-        st.session_state.photos_data = []
-        for f in uploaded_files:
-            img = Image.open(f)
-            # On réduit un peu la taille pour que ça passe mieux sur la connexion mobile
-            img.thumbnail((1024, 1024))
-            st.session_state.photos_data.append(img)
-        st.success(f"✅ {len(uploaded_files)} page(s) prête(s) ! Tu peux fermer ce volet.")
+# Zone de capture ultra-simple
+st.write("---")
+st.write("📸 **Étape 1 : Prends tes photos (une par une ou toutes ensemble)**")
+fichiers = st.file_uploader("", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True, key="uploader")
 
-# --- ZONE DE QUIZ ---
-if st.session_state.photos_data:
-    st.info(f"Score actuel : {st.session_state.xp} XP")
-    
-    # Bouton pour démarrer ou réinitialiser
-    if st.button("🚀 LANCER LE DÉFI (QCM)"):
-        st.session_state.messages = [] # On vide le chat pour recommencer
-        
-        with st.spinner("Analyse des photos en cours..."):
-            prompt = "Tu es le coach d'Anaïs (6ème). Analyse ces photos de cours. Pose la 1ère question en QCM (A, B ou C). Sois très encourageant et saute une ligne entre les choix."
+if fichiers:
+    # On sauvegarde immédiatement les photos dans un état permanent
+    nouvelles_photos = []
+    for f in fichiers:
+        img = Image.open(f)
+        # On force la rotation et le format pour éviter les images noires sur mobile
+        img = img.convert("RGB")
+        img.thumbnail((1024, 1024)) # Poids plume pour le réseau mobile
+        nouvelles_photos.append(img)
+    st.session_state.stock_photos = nouvelles_photos
+    st.success(f"✅ {len(st.session_state.stock_photos)} page(s) enregistrée(s) !")
+
+# Bouton de lancement
+if st.session_state.stock_photos:
+    if st.button("🚀 LANCER LE DÉFI MAINTENANT"):
+        st.session_state.messages = [] # Reset du chat
+        with st.spinner("J'analyse tes leçons..."):
             try:
-                # On envoie le texte + la liste d'images PIL
-                response = model.generate_content([prompt] + st.session_state.photos_data)
+                prompt = "Tu es le coach scolaire d'Anaïs (6ème). Analyse ces photos de cours. Pose la 1ère question en QCM (A, B ou C). Saute une ligne entre les choix et sois super encourageant !"
+                # On envoie le texte ET les photos stockées
+                response = model.generate_content([prompt] + st.session_state.stock_photos)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                st.error(f"Erreur d'analyse : {e}")
+                st.error(f"Erreur : {e}")
 
-    # Affichage du Chat
-    for i, msg in enumerate(st.session_state.messages):
-        with st.chat_message(msg["role"], avatar=("👤" if msg["role"] == "user" else "🌟")):
-            st.markdown(msg["content"])
-            if msg["role"] == "assistant":
-                if st.button("🔊 Écouter", key=f"audio_{i}"):
-                    tts = gTTS(text=msg["content"], lang='fr')
-                    fp = io.BytesIO()
-                    tts.write_to_fp(fp)
-                    st.audio(fp, format="audio/mp3", autoplay=True)
+# --- ZONE DE CHAT ---
+for i, msg in enumerate(st.session_state.messages):
+    with st.chat_message(msg["role"], avatar=("👤" if msg["role"] == "user" else "🌟")):
+        st.markdown(msg["content"])
+        if msg["role"] == "assistant":
+            if st.button("🔊 Écouter", key=f"audio_{i}"):
+                tts = gTTS(text=msg["content"], lang='fr')
+                fp = io.BytesIO()
+                tts.write_to_fp(fp)
+                st.audio(fp, format="audio/mp3", autoplay=True)
 
-    # Entrée de la réponse
-    if prompt_anais := st.chat_input("Ta réponse (A, B ou C)..."):
-        st.session_state.messages.append({"role": "user", "content": prompt_anais})
-        
-        with st.spinner("Je vérifie..."):
-            consigne = f"Anaïs a répondu '{prompt_anais}'. Vérifie sur les photos. Félicite-la et pose la question suivante en QCM."
+# Réponse d'Anaïs
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
+    reponse = st.chat_input("Ta réponse (A, B ou C)...")
+    if reponse:
+        st.session_state.messages.append({"role": "user", "content": reponse})
+        with st.spinner("Vérification..."):
             try:
-                response = model.generate_content([consigne] + st.session_state.photos_data)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                instruction = f"Anaïs a répondu '{reponse}'. Vérifie sur les photos. Félicite-la et pose la question suivante."
+                res = model.generate_content([instruction] + st.session_state.stock_photos)
+                st.session_state.messages.append({"role": "assistant", "content": res.text})
                 
-                if "bravo" in response.text.lower() or "super" in response.text.lower():
+                if any(w in res.text.lower() for w in ["bravo", "juste", "super"]):
                     st.balloons()
                     st.session_state.xp += 20
                 st.rerun()
             except Exception as e:
-                st.error(f"Erreur : {e}")
-else:
-    st.warning("👋 Coucou Anaïs ! Commence par ajouter les photos de ta leçon juste au-dessus.")
+                st.error(f"Oups : {e}")
