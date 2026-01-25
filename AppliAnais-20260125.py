@@ -2,38 +2,47 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 
-# 1. Configuration de la clé
+# --- CONFIGURATION ---
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
-    API_KEY = "VOTRE_CLE_POUR_TEST_LOCAL"
+    API_KEY = "VOTRE_CLE_API"
 
-# 2. Forcer la configuration SANS passer par les versions beta
 genai.configure(api_key=API_KEY)
 
-# 3. Initialisation du modèle avec un nom de modèle complet
-# Parfois, Streamlit a besoin du préfixe complet pour lever l'ambiguïté
-model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+# On utilise le modèle qui est présent dans votre liste
+model = genai.GenerativeModel('gemini-2.0-flash')
 
-st.title("🌟 Le Coach d'Anaïs")
+st.set_page_config(page_title="Le Coach d'Anaïs", page_icon="🎓")
 
-# Interface simplifiée pour le test de débogage
-uploaded_file = st.file_uploader("Prends une photo", type=['jpg', 'jpeg', 'png'])
+if 'xp' not in st.session_state:
+    st.session_state.xp = 0
 
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    st.image(img, width=300)
+st.title("🎓 Le Coach Magique d'Anaïs")
+
+# --- CAMERA / PHOTOS ---
+photos = st.file_uploader("Prends tes leçons en photo :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+
+if photos:
+    images_pretes = []
+    for p in photos:
+        img = Image.open(p)
+        img.thumbnail((800, 800))
+        images_pretes.append(img)
     
-    if st.button("Lancer le test"):
-        try:
-            # Test avec une syntaxe très simple
-            response = model.generate_content(["Qu'y a-t-il sur cette photo ?", img])
-            st.write(response.text)
-        except Exception as e:
-            # Si l'erreur 404 revient, nous allons afficher la liste des modèles 
-            # disponibles pour comprendre ce que voit le serveur
-            st.error(f"Erreur : {e}")
-            if "404" in str(e):
-                st.write("Modèles accessibles sur ce serveur :")
-                models = [m.name for m in genai.list_models()]
-                st.write(models)
+    st.image(images_pretes, width=150)
+
+    if st.button("Lancer le défi ! ✨"):
+        with st.spinner("L'IA analyse tes photos..."):
+            prompt = "Tu es un coach scolaire. Crée un quiz de 3 questions courtes sur ces photos. Donne les réponses à la fin."
+            try:
+                # Appel standard
+                response = model.generate_content([prompt] + images_pretes)
+                st.markdown("### 📝 Ton Défi :")
+                st.write(response.text)
+                st.session_state.xp += 20
+                st.balloons()
+            except Exception as e:
+                st.error(f"Erreur : {e}")
+
+st.sidebar.metric("XP", f"{st.session_state.xp} pts")
