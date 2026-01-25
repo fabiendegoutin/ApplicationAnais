@@ -17,7 +17,7 @@ client = genai.Client(
     http_options={'api_version': 'v1'} # On force la version stable v1 au lieu de v1beta
 )
 
-MODEL_ID = "gemini-2-flash" # Ce modèle est le plus stable pour les comptes gratuits
+MODEL_ID = "gemini-1.5-flash" # Ce modèle est le plus stable pour les comptes gratuits
 
 # --- 2. INITIALISATION ---
 if 'xp' not in st.session_state:
@@ -91,6 +91,7 @@ if st.session_state.dernier_quiz:
         st.session_state.dernier_quiz = None
         st.balloons()
         st.rerun()
+
 
 
 
