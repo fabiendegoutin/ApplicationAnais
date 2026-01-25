@@ -1,28 +1,23 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+from openai import OpenAI
 from PIL import Image
 from datetime import datetime
 import io
+import base64
 
 # ==============================
-# CONFIG STREAMLIT (OBLIGATOIRE EN PREMIER)
+# CONFIG STREAMLIT (TOUJOURS EN PREMIER)
 # ==============================
 st.set_page_config(page_title="Mon Coach Magique", page_icon="🎓")
 
 # ==============================
-# CONFIGURATION DE L'IA
+# CONFIGURATION OPENAI
 # ==============================
-# 👉 Sur Streamlit Cloud, ajoute ta clé dans Settings > Secrets :
-# GEMINI_API_KEY = "ta_cle_api"
-API_KEY = st.secrets["GEMINI_API_KEY"]
+# Dans Streamlit Cloud > Settings > Secrets :
+# OPENAI_API_KEY = "ta_cle"
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-client = genai.Client(
-    api_key=API_KEY,
-    http_options={"api_version": "v1"}
-)
-
-MODEL_ID = "gemini-1.5-flash"
+MODEL_ID = "gpt-4o"  # vision + texte (le plus stable)
 
 # ==============================
 # SESSION STATE
@@ -44,6 +39,14 @@ def ajouter_xp(montant):
         st.session_state.badges.append("🚀 Apprenti")
     if st.session_state.xp >= 300 and "👑 Champion" not in st.session_state.badges:
         st.session_state.badges.append("👑 Champion")
+
+# ==============================
+# OUTILS
+# ==============================
+def image_to_base64(img: Image.Image) -> str:
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
 # ==============================
 # SIDEBAR
@@ -85,7 +88,6 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    # Optimisation des images (anti-bug Gemini)
     images = []
     for f in uploaded_files:
         img = Image.open(f)
@@ -103,47 +105,37 @@ if uploaded_files:
         with st.spinner("Je lis ton cours avec attention..."):
             prompt = f"""
 Tu es un coach bienveillant pour un enfant ({niveau}).
-Analyse ces photos de cours.
+À partir des photos de cours, crée 3 questions courtes et ludiques.
 
-Crée 3 questions courtes et ludiques.
-
-CONSIGNES :
+RÈGLES IMPORTANTES :
 - {"Utilise des phrases très courtes et des emojis." if mode_tdah else ""}
-- {"Commence par dire que le cours est intéressant. En cas d'erreur, donne un indice doux." if mode_confiance else ""}
-- Ne sois jamais sévère.
-- Donne les solutions à la fin.
+- {"Commence par valoriser le cours. En cas d'erreur, donne un indice doux." if mode_confiance else ""}
+- Ne dis jamais que c'est faux brutalement
+- Termine par les solutions
 """
-            
+
+            content = [{"type": "text", "text": prompt}]
+
+            for img in images:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_to_base64(img)}"
+                    }
+                })
+
             try:
-                parts = [types.Part(text=prompt)]
-            
-                for img in images:
-                    buffer = io.BytesIO()
-                    img.save(buffer, format="JPEG")
-                    image_bytes = buffer.getvalue()
-            
-                    parts.append(
-                        types.Part.from_bytes(
-                            data=image_bytes,
-                            mime_type="image/jpeg"
-                        )
-                    )
-            
-                response = client.models.generate_content(
+                response = client.chat.completions.create(
                     model=MODEL_ID,
-                    contents=parts
+                    messages=[{"role": "user", "content": content}],
                 )
-            
-                st.session_state.dernier_quiz = (
-                    response.candidates[0].content.parts[0].text
-                )
-            
+
+                st.session_state.dernier_quiz = response.choices[0].message.content
                 ajouter_xp(20)
                 st.rerun()
-            
-            except Exception as e:
-                st.exception(e)  # garde pour debug
-                #st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
+
+            except Exception:
+                st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
 
 # ==============================
 # AFFICHAGE DU QUIZ
@@ -162,10 +154,3 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
-
-
-
-
-
-
-
