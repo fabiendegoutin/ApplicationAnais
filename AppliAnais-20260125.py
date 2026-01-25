@@ -128,7 +128,8 @@ CONSIGNES :
                 ajouter_xp(20)
                 st.rerun()
             except Exception as e:
-                st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
+                st.exception(e)
+                #st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
 
 # ==============================
 # AFFICHAGE DU QUIZ
@@ -147,6 +148,7 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
 
 
