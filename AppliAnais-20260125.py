@@ -1,5 +1,6 @@
 import streamlit as st
 from google import genai
+from google.genai import types
 from PIL import Image
 from datetime import datetime
 
@@ -113,8 +114,16 @@ CONSIGNES :
 """
 
             try:
-                content = [prompt] + images
-                response = model.generate_content(content)
+                parts = [types.Part.from_text(prompt)]
+                
+                for img in images:
+                    parts.append(types.Part.from_image(img))
+                
+                response = client.models.generate_content(
+                    model=MODEL_ID,
+                    contents=parts
+                )
+                
                 st.session_state.dernier_quiz = response.text
                 ajouter_xp(20)
                 st.rerun()
@@ -138,4 +147,5 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
