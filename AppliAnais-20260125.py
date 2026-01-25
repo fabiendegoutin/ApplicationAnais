@@ -15,8 +15,12 @@ st.set_page_config(page_title="Mon Coach Magique", page_icon="🎓")
 # GEMINI_API_KEY = "ta_cle_api"
 API_KEY = st.secrets["GEMINI_API_KEY"]
 
-gclient = genai.Client(api_key=API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = genai.Client(
+    api_key=API_KEY,
+    http_options={"api_version": "v1"}
+)
+
+MODEL_ID = "gemini-1.5-flash"
 
 # ==============================
 # SESSION STATE
@@ -134,3 +138,4 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
