@@ -113,4 +113,9 @@ if len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] 
             historique = [msg["content"] for msg in st.session_state.messages]
             historique.append(instruction)
             
-            response = client.models.generate_content(model="gemini-2.0-flash
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=historique) #
+            
+            st.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.session_state.xp += 15
+            st.rerun()
