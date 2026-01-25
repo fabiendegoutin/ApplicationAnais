@@ -124,7 +124,7 @@ CONSIGNES :
                     contents=parts
                 )
                 
-                st.session_state.dernier_quiz = response.text
+                st.session_state.dernier_quiz = response.candidates[0].content.parts[0].text
                 ajouter_xp(20)
                 st.rerun()
             except Exception as e:
@@ -147,5 +147,6 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
 
