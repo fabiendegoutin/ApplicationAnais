@@ -117,7 +117,16 @@ CONSIGNES :
                 parts = [types.Part(text=prompt)]
             
                 for img in images:
-                    parts.append(types.Part(image=img))
+                    buffer = io.BytesIO()
+                    img.save(buffer, format="JPEG")
+                    image_bytes = buffer.getvalue()
+            
+                    parts.append(
+                        types.Part.from_bytes(
+                            data=image_bytes,
+                            mime_type="image/jpeg"
+                        )
+                    )
             
                 response = client.models.generate_content(
                     model=MODEL_ID,
@@ -132,7 +141,7 @@ CONSIGNES :
                 st.rerun()
             
             except Exception as e:
-                st.exception(e)  # garde ceci pour tester
+                st.exception(e)  # garde pour debug
                 #st.error("Oups 😕 Il y a eu un petit souci. Réessaie tranquillement.")
 
 # ==============================
@@ -152,6 +161,7 @@ if st.session_state.dernier_quiz:
         st.balloons()
         st.success("Bravo 🌟 Tu peux être fière de toi ! +50 XP")
         st.rerun()
+
 
 
 
