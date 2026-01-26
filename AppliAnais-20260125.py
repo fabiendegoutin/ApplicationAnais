@@ -3,33 +3,27 @@ import google.generativeai as genai
 from PIL import Image
 from gtts import gTTS
 import io
-import time
 
-# Configuration pour mobile
+# Configuration
 st.set_page_config(page_title="Le Coach Magique 🌟", layout="centered")
 
-# Design personnalisé pour Anaïs (TDAH-friendly)
+# Design et Couleurs
 st.markdown("""
     <style>
-    /* Gros boutons colorés pour les réponses */
     .stButton>button { border-radius: 20px; height: 3.5em; font-size: 1.2rem !important; width: 100%; font-weight: bold; border: none; }
-    
-    /* Couleurs spécifiques pour les choix QCM */
-    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50; color: white; } /* Vert */
-    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3; color: white; } /* Bleu */
-    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0; color: white; } /* Violet */
-    
-    /* Style des bulles de chat */
+    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50; color: white; }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3; color: white; }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0; color: white; }
     .stChatMessage { border-radius: 15px; font-size: 1.1rem; border: 1px solid #E0E0E0; }
-    
-    /* Bouton lancer et terminer */
     button[kind="secondary"] { background-color: #FFC107; color: black; }
+    /* Barre de progression personnalisée */
+    .stProgress > div > div > div > div { background-color: #4CAF50; }
     </style>
 """, unsafe_allow_html=True)
 
-# Connexion à l'API
+# Connexion API
 if "GEMINI_API_KEY" not in st.secrets:
-    st.error("Clé API manquante dans les Secrets Streamlit.")
+    st.error("Clé API manquante dans les Secrets.")
     st.stop()
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -45,7 +39,9 @@ if "attente_reponse" not in st.session_state: st.session_state.attente_reponse =
 with st.sidebar:
     st.header("⚙️ Paramètres")
     prenom = st.text_input("Prénom de l'élève :", value="Anaïs")
-    if st.button("🔄 Réinitialiser la séance"):
+    st.write("---")
+    st.write(f"Niveau actuel : **{st.session_state.xp // 100 + 1}**")
+    if st.button("🔄 Reset Séance"):
         st.session_state.xp = 0
         st.session_state.messages = []
         st.session_state.stock_photos = []
@@ -53,79 +49,75 @@ with st.sidebar:
 
 # --- INTERFACE PRINCIPALE ---
 st.title(f"🌟 Le Coach de {prenom}")
-st.subheader(f"⭐ Score actuel : {st.session_state.xp} XP")
 
-# Zone de capture
+# Barre de progression vers le prochain niveau (tous les 100 XP)
+prochain_palier = ((st.session_state.xp // 100) + 1) * 100
+progression = (st.session_state.xp % 100) / 100
+st.write(f"⭐ **{st.session_state.xp} XP** (Objectif : {prochain_palier} XP pour le prochain badge !)")
+st.progress(progression)
+
 st.write("---")
-fichiers = st.file_uploader("📸 Dépose ou prends tes leçons en photo :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+fichiers = st.file_uploader("📸 Photos de tes leçons :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
 if fichiers:
-    photos_traitees = []
-    for f in fichiers:
-        img = Image.open(f).convert("RGB")
-        img.thumbnail((1024, 1024))
-        photos_traitees.append(img)
-    st.session_state.stock_photos = photos_traitees
-    st.success(f"✅ {len(st.session_state.stock_photos)} page(s) enregistrée(s) !")
+    photos = [Image.open(f).convert("RGB") for f in fichiers]
+    for p in photos: p.thumbnail((1024, 1024))
+    st.session_state.stock_photos = photos
+    st.success(f"✅ {len(photos)} page(s) prête(s) !")
 
-# Boutons d'action
-col_action1, col_action2 = st.columns(2)
-with col_action1:
-    btn_lancer = st.button(f"🚀 LANCER LE DÉFI")
-with col_action2:
+col_a1, col_a2 = st.columns(2)
+with col_a1:
+    btn_lancer = st.button(f"🚀 LANCER LE QUIZ")
+with col_a2:
     btn_fin = st.button("🏁 VOIR MON RÉSUMÉ")
 
-# --- LOGIQUE DE GÉNÉRATION (Gestion Erreur 429) ---
-def appeler_coach(prompt_complet):
+# --- FONCTIONS ---
+def appeler_coach(contenu):
     try:
-        response = model.generate_content(prompt_complet)
+        response = model.generate_content(contenu)
         return response.text
     except Exception as e:
         if "429" in str(e):
-            st.warning("🌟 Oups ! Le coach reprend son souffle (trop de questions d'un coup). Attends 30 petites secondes et réessaye !")
+            st.warning("🌟 Je reprends mon souffle... Attends 20 secondes !")
         else:
-            st.error(f"Désolé, il y a un petit souci technique : {e}")
+            st.error(f"Erreur : {e}")
         return None
 
-# Lancement
+def lire_audio(texte):
+    # Langue française, slow=False pour une voix plus dynamique et rapide
+    tts = gTTS(text=texte, lang='fr', slow=False)
+    fp = io.BytesIO()
+    tts.write_to_fp(fp)
+    return fp
+
+# --- LOGIQUE QUIZ ---
 if btn_lancer and st.session_state.stock_photos:
     st.session_state.messages = []
-    with st.spinner("Analyse de tes cours..."):
-        prompt = f"""Tu es le coach d'IA de {prenom} (6ème, TDAH). 
-        Analyse ces photos. Pose une seule question QCM.
-        Mise en forme :
-        A) [Option 1]
-        
-        B) [Option 2]
-        
-        C) [Option 3]
-        Saute bien une ligne entre les options. Sois très encourageant !"""
-        resultat = appeler_coach([prompt] + st.session_state.stock_photos)
-        if resultat:
-            st.session_state.messages.append({"role": "assistant", "content": resultat})
+    with st.spinner("Je lis tes notes..."):
+        prompt = f"Tu es le coach d'IA de {prenom} (6ème, TDAH). Pose une question QCM aérée (A, B, C) basée sur les photos."
+        res = appeler_coach([prompt] + st.session_state.stock_photos)
+        if res:
+            st.session_state.messages.append({"role": "assistant", "content": res})
             st.session_state.attente_reponse = True
 
-# Résumé final
 if btn_fin:
     st.balloons()
-    st.info(f"### 🎉 Bravo {prenom} !\nTu as terminé avec **{st.session_state.xp} XP**. Tu as bien travaillé !")
+    st.info(f"### 🎉 Super séance {prenom} !\nScore final : {st.session_state.xp} XP")
     st.stop()
 
-# --- AFFICHAGE DU CHAT ---
+# --- CHAT ET AUDIO ---
 for i, msg in enumerate(st.session_state.messages):
     avatar = "👤" if msg["role"] == "user" else "🌟"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
         if msg["role"] == "assistant":
             if st.button("🔊 Écouter", key=f"audio_{i}"):
-                tts = gTTS(text=msg["content"], lang='fr')
-                fp = io.BytesIO()
-                tts.write_to_fp(fp)
-                st.audio(fp, format="audio/mp3", autoplay=True)
+                audio_fp = lire_audio(msg["content"])
+                st.audio(audio_fp, format="audio/mp3", autoplay=True)
 
-# --- ZONE DE RÉPONSE CLICABLE ---
+# --- ZONE DE RÉPONSE ---
 if st.session_state.attente_reponse:
-    st.write(f"### À toi de jouer {prenom} :")
+    st.write(f"### Ta réponse {prenom} :")
     cA, cB, cC = st.columns(3)
     choix = None
     with cA: 
@@ -136,22 +128,21 @@ if st.session_state.attente_reponse:
         if st.button("🅲 C"): choix = "C"
 
     if choix:
-        st.session_state.messages.append({"role": "user", "content": f"Je choisis la réponse {choix}"})
+        st.session_state.messages.append({"role": "user", "content": f"Je choisis la {choix}"})
         st.session_state.attente_reponse = False
         with st.spinner("Vérification..."):
-            instruction = f"""{prenom} a répondu {choix}. 
-            1. Vérifie sur les photos. 
-            2. Si c'est juste : Félicite-la (+20 XP). 
-            3. Si c'est faux : Donne la bonne réponse gentiment et explique-la simplement.
-            4. Pose la question suivante (QCM A, B, C avec lignes sautées)."""
+            historique = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
+            instruction = f"""Historique : {historique}
+            {prenom} a répondu {choix}. 
+            1. Vérifie sur les photos si c'est juste. 
+            2. Explique pourquoi et félicite-la. 
+            3. Pose la question suivante (QCM A, B, C avec lignes sautées)."""
             
             reponse_coach = appeler_coach([instruction] + st.session_state.stock_photos)
             if reponse_coach:
                 st.session_state.messages.append({"role": "assistant", "content": reponse_coach})
                 st.session_state.attente_reponse = True
-                
-                # Feedback visuel
-                if any(w in reponse_coach.lower() for w in ["bravo", "juste", "exact", "super", "correct"]):
+                if any(w in reponse_coach.lower() for w in ["bravo", "juste", "exact", "correct"]):
                     st.balloons()
                     st.session_state.xp += 20
                 st.rerun()
