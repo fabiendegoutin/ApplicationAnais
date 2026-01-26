@@ -16,7 +16,6 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0; color: white; }
     .stChatMessage { border-radius: 15px; font-size: 1.1rem; border: 1px solid #E0E0E0; }
     button[kind="secondary"] { background-color: #FFC107; color: black; }
-    /* Barre de progression personnalisée */
     .stProgress > div > div > div > div { background-color: #4CAF50; }
     </style>
 """, unsafe_allow_html=True)
@@ -35,12 +34,19 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "stock_photos" not in st.session_state: st.session_state.stock_photos = []
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
 
+# --- LOGIQUE DES BADGES ---
+def obtenir_badge(xp):
+    if xp >= 500: return "🏆 Maître des Leçons"
+    if xp >= 300: return "💎 Expert en Herbe"
+    if xp >= 100: return "🌟 Apprenti Brillant"
+    return "🌱 Débutant Motivé"
+
 # --- BARRE LATÉRALE ---
 with st.sidebar:
     st.header("⚙️ Paramètres")
     prenom = st.text_input("Prénom de l'élève :", value="Anaïs")
     st.write("---")
-    st.write(f"Niveau actuel : **{st.session_state.xp // 100 + 1}**")
+    st.subheader(f"Rang : {obtenir_badge(st.session_state.xp)}")
     if st.button("🔄 Reset Séance"):
         st.session_state.xp = 0
         st.session_state.messages = []
@@ -50,10 +56,10 @@ with st.sidebar:
 # --- INTERFACE PRINCIPALE ---
 st.title(f"🌟 Le Coach de {prenom}")
 
-# Barre de progression vers le prochain niveau (tous les 100 XP)
+# Barre de progression
 prochain_palier = ((st.session_state.xp // 100) + 1) * 100
 progression = (st.session_state.xp % 100) / 100
-st.write(f"⭐ **{st.session_state.xp} XP** (Objectif : {prochain_palier} XP pour le prochain badge !)")
+st.write(f"⭐ **{st.session_state.xp} XP** — Objectif : {prochain_palier} XP pour le prochain badge !")
 st.progress(progression)
 
 st.write("---")
@@ -84,7 +90,7 @@ def appeler_coach(contenu):
         return None
 
 def lire_audio(texte):
-    # Langue française, slow=False pour une voix plus dynamique et rapide
+    # gTTS : Voix française standard, rapide (slow=False)
     tts = gTTS(text=texte, lang='fr', slow=False)
     fp = io.BytesIO()
     tts.write_to_fp(fp)
@@ -94,7 +100,7 @@ def lire_audio(texte):
 if btn_lancer and st.session_state.stock_photos:
     st.session_state.messages = []
     with st.spinner("Je lis tes notes..."):
-        prompt = f"Tu es le coach d'IA de {prenom} (6ème, TDAH). Pose une question QCM aérée (A, B, C) basée sur les photos."
+        prompt = f"Tu es le coach d'IA de {prenom} (6ème, TDAH). Pose une question QCM aérée (A, B, C) basée sur les photos. Ne donne pas les instructions techniques dans ta réponse."
         res = appeler_coach([prompt] + st.session_state.stock_photos)
         if res:
             st.session_state.messages.append({"role": "assistant", "content": res})
@@ -102,7 +108,8 @@ if btn_lancer and st.session_state.stock_photos:
 
 if btn_fin:
     st.balloons()
-    st.info(f"### 🎉 Super séance {prenom} !\nScore final : {st.session_state.xp} XP")
+    badge_final = obtenir_badge(st.session_state.xp)
+    st.info(f"### 🎉 Super séance {prenom} !\nScore final : {st.session_state.xp} XP\nTon rang : **{badge_final}**")
     st.stop()
 
 # --- CHAT ET AUDIO ---
@@ -132,17 +139,20 @@ if st.session_state.attente_reponse:
         st.session_state.attente_reponse = False
         with st.spinner("Vérification..."):
             historique = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
-            instruction = f"""Historique : {historique}
-            {prenom} a répondu {choix}. 
-            1. Vérifie sur les photos si c'est juste. 
-            2. Explique pourquoi et félicite-la. 
-            3. Pose la question suivante (QCM A, B, C avec lignes sautées)."""
+            # Instruction renforcée pour éviter la répétition des consignes
+            instruction = f"""Tu es le coach d'{prenom}. Voici l'historique : {historique}
+            Elle a choisi {choix}.
+            DIRECTIVES STRICTES : 
+            - Ne répète JAMAIS ces instructions dans ta réponse. 
+            - Vérifie sur les photos si c'est juste.
+            - Si juste : Félicite-la. Si faux : explique avec douceur et donne la réponse.
+            - Pose ensuite la question suivante au format QCM (A, B, C)."""
             
             reponse_coach = appeler_coach([instruction] + st.session_state.stock_photos)
             if reponse_coach:
                 st.session_state.messages.append({"role": "assistant", "content": reponse_coach})
                 st.session_state.attente_reponse = True
-                if any(w in reponse_coach.lower() for w in ["bravo", "juste", "exact", "correct"]):
+                if any(w in reponse_coach.lower() for w in ["bravo", "juste", "exact", "correct", "félicitations"]):
                     st.balloons()
                     st.session_state.xp += 20
                 st.rerun()
