@@ -75,4 +75,83 @@ with col_action1:
 with col_action2:
     btn_fin = st.button("🏁 VOIR MON RÉSUMÉ")
 
-# --- LOGIQUE DE
+# --- LOGIQUE DE GÉNÉRATION (Gestion Erreur 429) ---
+def appeler_coach(prompt_complet):
+    try:
+        response = model.generate_content(prompt_complet)
+        return response.text
+    except Exception as e:
+        if "429" in str(e):
+            st.warning("🌟 Oups ! Le coach reprend son souffle (trop de questions d'un coup). Attends 30 petites secondes et réessaye !")
+        else:
+            st.error(f"Désolé, il y a un petit souci technique : {e}")
+        return None
+
+# Lancement
+if btn_lancer and st.session_state.stock_photos:
+    st.session_state.messages = []
+    with st.spinner("Analyse de tes cours..."):
+        prompt = f"""Tu es le coach d'IA de {prenom} (6ème, TDAH). 
+        Analyse ces photos. Pose une seule question QCM.
+        Mise en forme :
+        A) [Option 1]
+        
+        B) [Option 2]
+        
+        C) [Option 3]
+        Saute bien une ligne entre les options. Sois très encourageant !"""
+        resultat = appeler_coach([prompt] + st.session_state.stock_photos)
+        if resultat:
+            st.session_state.messages.append({"role": "assistant", "content": resultat})
+            st.session_state.attente_reponse = True
+
+# Résumé final
+if btn_fin:
+    st.balloons()
+    st.info(f"### 🎉 Bravo {prenom} !\nTu as terminé avec **{st.session_state.xp} XP**. Tu as bien travaillé !")
+    st.stop()
+
+# --- AFFICHAGE DU CHAT ---
+for i, msg in enumerate(st.session_state.messages):
+    avatar = "👤" if msg["role"] == "user" else "🌟"
+    with st.chat_message(msg["role"], avatar=avatar):
+        st.markdown(msg["content"])
+        if msg["role"] == "assistant":
+            if st.button("🔊 Écouter", key=f"audio_{i}"):
+                tts = gTTS(text=msg["content"], lang='fr')
+                fp = io.BytesIO()
+                tts.write_to_fp(fp)
+                st.audio(fp, format="audio/mp3", autoplay=True)
+
+# --- ZONE DE RÉPONSE CLICABLE ---
+if st.session_state.attente_reponse:
+    st.write(f"### À toi de jouer {prenom} :")
+    cA, cB, cC = st.columns(3)
+    choix = None
+    with cA: 
+        if st.button("🅰️ A"): choix = "A"
+    with cB: 
+        if st.button("🅱️ B"): choix = "B"
+    with cC: 
+        if st.button("🅲 C"): choix = "C"
+
+    if choix:
+        st.session_state.messages.append({"role": "user", "content": f"Je choisis la réponse {choix}"})
+        st.session_state.attente_reponse = False
+        with st.spinner("Vérification..."):
+            instruction = f"""{prenom} a répondu {choix}. 
+            1. Vérifie sur les photos. 
+            2. Si c'est juste : Félicite-la (+20 XP). 
+            3. Si c'est faux : Donne la bonne réponse gentiment et explique-la simplement.
+            4. Pose la question suivante (QCM A, B, C avec lignes sautées)."""
+            
+            reponse_coach = appeler_coach([instruction] + st.session_state.stock_photos)
+            if reponse_coach:
+                st.session_state.messages.append({"role": "assistant", "content": reponse_coach})
+                st.session_state.attente_reponse = True
+                
+                # Feedback visuel
+                if any(w in reponse_coach.lower() for w in ["bravo", "juste", "exact", "super", "correct"]):
+                    st.balloons()
+                    st.session_state.xp += 20
+                st.rerun()
