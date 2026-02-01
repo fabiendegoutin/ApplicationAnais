@@ -61,8 +61,8 @@ if st.button("🚀 LANCER LE QUIZZ"):
             prompt = f"""Voici les faits : {st.session_state.cours_texte}.
             MISSION : Pose une question QCM courte.
             CONSIGNES DE MISE EN PAGE :
-            - Saute DEUX lignes vides entre la question et l'option A.
-            - Saute UNE ligne vide entre chaque option (A, B, C).
+            - Saute UNE lignes vides entre la question et l'option A.
+            - Saute UNE ligne entre chaque option (A, B, C).
             - Ne dis jamais 'selon le texte'."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
@@ -124,3 +124,4 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             st.rerun() # Le rerun replace l'utilisateur en bas de page
+
