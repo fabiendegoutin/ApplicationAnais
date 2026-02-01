@@ -31,12 +31,11 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
 
-# --- PARAMÈTRES (Sidebar) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Options")
     prenom = st.text_input("Prénom :", value="Anaïs")
     activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
-    st.write("---")
     if st.button("🗑️ Recommencer"):
         st.session_state.cours_texte = None
         st.session_state.messages = []
@@ -48,40 +47,36 @@ st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
 fichiers = st.file_uploader("📸 Photos de la leçon :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
-# --- EXTRACTION UNIQUE (ÉCONOMIE TOKENS) ---
+# --- MÉMORISATION (ÉCONOMIE TOKENS) ---
 if fichiers and st.session_state.cours_texte is None:
     if st.button("🧠 Étape 1 : Mémoriser le cours"):
         with st.spinner("Analyse des images..."):
             photos = [Image.open(f).convert("RGB") for f in fichiers]
             for p in photos: p.thumbnail((1024, 1024))
-            contenu = ["Extrais tout le texte de ces images. Sois très complet."] + photos
+            contenu = ["Extrais tout le texte de ces images. Sois très précis et fidèle au cours."] + photos
             res = model.generate_content(contenu)
             st.session_state.cours_texte = res.text
             st.success("✅ Cours mémorisé !")
 
-# --- BOUTON DE JEU ---
+# --- GÉNÉRATION QUESTION ---
 if st.button("🚀 LANCER UNE QUESTION"):
     if st.session_state.cours_texte is None:
         st.warning("Mémorise d'abord ton cours ! 🧠")
     else:
         st.session_state.messages = []
         prompt = f"""Cours : {st.session_state.cours_texte}. 
-        Pose une question QCM courte à {prenom}.
-        FORMAT DE RÉPONSE OBLIGATOIRE :
-        - Saute une ligne entre la question et les choix.
+        MISSION : Pose une question QCM à {prenom}.
+        RÈGLE D'OR : La bonne réponse DOIT être présente dans tes options A, B ou C.
+        Vérifie deux fois ton information par rapport au texte du cours.
+        FORMAT :
         - Saute une ligne vide entre chaque option A, B et C.
-        - Exemple :
-        A) Choix 1
-        
-        B) Choix 2
-        
-        C) Choix 3"""
+        - Ne fais aucune introduction."""
         res = model.generate_content(prompt)
         st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.session_state.attente_reponse = True
         st.rerun()
 
-# --- CHAT ---
+# --- CHAT ET AUDIO ---
 for i, msg in enumerate(st.session_state.messages):
     avatar = "🌈" if msg["role"] == "assistant" else "⭐"
     with st.chat_message(msg["role"], avatar=avatar):
@@ -111,13 +106,16 @@ if st.session_state.attente_reponse:
             Réponse choisie : {choix}
             
             CONSIGNES :
-            1. Si juste, commence par 'BRAVO'. Si faux, commence par 'ZUT' et explique brièvement.
-            2. Pose ensuite une nouvelle question QCM.
-            3. SAUTE UNE LIGNE entre chaque option A, B et C pour la lisibilité."""
+            1. Vérifie dans le cours si c'est juste.
+            2. Si juste : commence ton message PAR LE MOT 'BRAVO'.
+            3. Si faux : commence ton message PAR LE MOT 'ZUT'. Explique la bonne réponse.
+            4. Pose ensuite une nouvelle question QCM.
+            5. SAUTE UNE LIGNE entre chaque option A, B et C."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
+            # Gestion stricte des ballons
             if txt.strip().upper().startswith("BRAVO"):
                 st.session_state.xp += 20
                 if activer_ballons:
