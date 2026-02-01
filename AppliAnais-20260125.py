@@ -36,9 +36,15 @@ if "file_uploader_key" not in st.session_state: st.session_state.file_uploader_k
 with st.sidebar:
     st.header("⚙️ Réglages")
     activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
+    
+    # CORRECTION DU RESET
     if st.button("➕ Nouvelle Leçon / Reset"):
-        # On vide tout et on change la clé de l'uploader pour effacer les fichiers
-        st.session_state.clear()
+        # On réinitialise manuellement les variables clés au lieu de tout vider
+        st.session_state.xp = 0
+        st.session_state.messages = []
+        st.session_state.cours_texte = None
+        st.session_state.attente_reponse = False
+        # On change la clé pour effacer les photos de l'écran
         st.session_state.file_uploader_key += 1
         st.rerun()
 
@@ -46,7 +52,7 @@ with st.sidebar:
 st.title(f"✨ Le Coach d'Anaïs")
 st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
-# Utilisation d'une clé dynamique pour forcer la remise à zéro de l'uploader
+# Uploader avec clé dynamique pour le reset
 fichiers = st.file_uploader("📸 Dépose tes photos de cours :", 
                             type=['jpg', 'jpeg', 'png'], 
                             accept_multiple_files=True,
@@ -58,6 +64,7 @@ if st.button("🚀 LANCER LE QUIZZ"):
         st.warning("Ajoute une photo d'abord ! 📸")
     else:
         with st.spinner("Je prépare ta question..."):
+            # L'optimisation des tokens est ici : on ne lit les images qu'une fois
             if st.session_state.cours_texte is None:
                 photos = [Image.open(f).convert("RGB") for f in fichiers]
                 for p in photos: p.thumbnail((1024, 1024))
@@ -68,9 +75,9 @@ if st.button("🚀 LANCER LE QUIZZ"):
             prompt = f"""Tu es un coach joyeux et enthousiaste ! Savoir : {st.session_state.cours_texte}.
             MISSION : Pose une question QCM courte.
             CONSIGNES :
-            - Utilise un ton dynamique avec des points d'exclamation !
-            - Ne cite JAMAIS le cours.
-            - Saute DEUX lignes vides entre chaque option A, B et C."""
+            - Ton dynamique avec des points d'exclamation !
+            - Ne dis JAMAIS 'selon le texte' ou 'd'après le cours'.
+            - Saute UNE ligne entre chaque option A, B et C."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -110,13 +117,14 @@ if st.session_state.attente_reponse:
             Réponse choisie : {choix}
             - Si juste : commence par 'BRAVO ! C'est super !'.
             - Si faux : commence par 'Oups ! Presque !'. Explique en 2 phrases MAX.
-            - Pose ensuite une nouvelle question.
-            - Saute UNE ligne entre chaque option A, B et C."""
+            - Pose ensuite une nouvelle question QCM.
+            - Saute DEUX lignes vides entre chaque option A, B et C."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if any(word in txt.upper()[:50] for word in ["BRAVO", "SUPER", "GÉNIAL"]):
+            # Détection ultra-fiable des ballons
+            if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "GÉNIAL", "OUIII"]):
                 st.session_state.xp += 20
                 if activer_ballons:
                     st.balloons()
@@ -124,5 +132,6 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             
+            # JavaScript pour le scroll automatique vers le bas
             st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
             st.rerun()
