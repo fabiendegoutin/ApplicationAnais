@@ -19,7 +19,7 @@ st.markdown("""
 
 # Connexion API
 if "GEMINI_API_KEY" not in st.secrets:
-    st.error("Clé API manquante.")
+    st.error("Clé API manquante dans les Secrets.")
     st.stop()
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -36,7 +36,8 @@ with st.sidebar:
     st.header("⚙️ Options")
     prenom = st.text_input("Prénom :", value="Anaïs")
     activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
-    if st.button("🗑️ Effacer le cours"):
+    st.write("---")
+    if st.button("🗑️ Recommencer"):
         st.session_state.cours_texte = None
         st.session_state.messages = []
         st.rerun()
@@ -47,16 +48,16 @@ st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
 fichiers = st.file_uploader("📸 Photos de la leçon :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
-# --- LOGIQUE : EXTRACTION UNIQUE (ÉCONOMIE DE TOKENS) ---
+# --- EXTRACTION UNIQUE (ÉCONOMIE TOKENS) ---
 if fichiers and st.session_state.cours_texte is None:
-    if st.button("🧠 Mémoriser le cours"):
-        with st.spinner("Analyse des images (une seule fois)..."):
+    if st.button("🧠 Étape 1 : Mémoriser le cours"):
+        with st.spinner("Analyse des images..."):
             photos = [Image.open(f).convert("RGB") for f in fichiers]
             for p in photos: p.thumbnail((1024, 1024))
-            # On demande à l'IA d'extraire tout le texte
-            res = model.generate_content(["Extrais tout le texte de ces images. Sois très complet.", photos])
+            contenu = ["Extrais tout le texte de ces images. Sois très complet."] + photos
+            res = model.generate_content(contenu)
             st.session_state.cours_texte = res.text
-            st.success("✅ Cours mémorisé ! Tu peux ranger tes photos.")
+            st.success("✅ Cours mémorisé !")
 
 # --- BOUTON DE JEU ---
 if st.button("🚀 LANCER UNE QUESTION"):
@@ -64,8 +65,17 @@ if st.button("🚀 LANCER UNE QUESTION"):
         st.warning("Mémorise d'abord ton cours ! 🧠")
     else:
         st.session_state.messages = []
-        # On envoie le texte extrait au lieu des images (ÉCONOMIE)
-        prompt = f"Cours : {st.session_state.cours_texte}. Pose une question QCM courte (A, B, C) l'une sous l'autre."
+        prompt = f"""Cours : {st.session_state.cours_texte}. 
+        Pose une question QCM courte à {prenom}.
+        FORMAT DE RÉPONSE OBLIGATOIRE :
+        - Saute une ligne entre la question et les choix.
+        - Saute une ligne vide entre chaque option A, B et C.
+        - Exemple :
+        A) Choix 1
+        
+        B) Choix 2
+        
+        C) Choix 3"""
         res = model.generate_content(prompt)
         st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.session_state.attente_reponse = True
@@ -93,22 +103,24 @@ if st.session_state.attente_reponse:
     if c3.button("C"): choix = "C"
 
     if choix:
-        st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
+        st.session_state.messages.append({"role": "user", "content": f"Je choisis la {choix}"})
         st.session_state.attente_reponse = False
         with st.spinner("Vérification..."):
-            # On travaille uniquement sur le texte pour économiser les tokens
             prompt_v = f"""Cours : {st.session_state.cours_texte}
             Question : {st.session_state.messages[-2]['content']}
             Réponse choisie : {choix}
-            Si juste, commence par 'BRAVO'. Si faux, commence par 'ZUT' et explique. 
-            Pose ensuite une nouvelle question QCM (A, B, C) l'une sous l'autre."""
+            
+            CONSIGNES :
+            1. Si juste, commence par 'BRAVO'. Si faux, commence par 'ZUT' et explique brièvement.
+            2. Pose ensuite une nouvelle question QCM.
+            3. SAUTE UNE LIGNE entre chaque option A, B et C pour la lisibilité."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if txt.strip().startswith("BRAVO"):
+            if txt.strip().upper().startswith("BRAVO"):
                 st.session_state.xp += 20
-                if activer_ballons: # Option ballons
+                if activer_ballons:
                     st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
