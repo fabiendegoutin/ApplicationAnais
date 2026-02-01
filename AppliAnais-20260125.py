@@ -7,144 +7,103 @@ import io
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
-# CSS MIS À JOUR POUR LE SCORE FIXE
+# CSS pour le score Rose à droite et l'interface
 st.markdown(f"""
     <style>
-    /* Badge de score rose fixe, toujours au premier plan */
     .fixed-score {{
         position: fixed;
-        top: 80px; /* Un peu plus bas pour ne pas cacher le menu Streamlit */
+        top: 20px;
         right: 20px;
         background-color: #FF69B4;
-        padding: 15px 25px;
+        padding: 12px 20px;
         border-radius: 30px;
         font-weight: bold;
-        box-shadow: 4px 4px 15px rgba(0,0,0,0.3);
-        z-index: 10000; /* Force l'affichage par-dessus tout */
-        font-size: 1.4em;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+        z-index: 1000;
         color: white;
-        border: 2px solid white;
     }}
     div[data-testid="stHorizontalBlock"] > div:nth-child(1) button {{ background-color: #4CAF50 !important; color: white !important; }}
     div[data-testid="stHorizontalBlock"] > div:nth-child(2) button {{ background-color: #2196F3 !important; color: white !important; }}
     div[data-testid="stHorizontalBlock"] > div:nth-child(3) button {{ background-color: #9C27B0 !important; color: white !important; }}
-    .stButton>button {{ border-radius: 20px; font-weight: bold; height: 3em; border: none; width: 100%; }}
-    .stChatMessage {{ border-radius: 15px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }}
+    .stButton>button {{ border-radius: 20px; font-weight: bold; height: 3em; width: 100%; }}
     </style>
 """, unsafe_allow_html=True)
 
 # Connexion API
-if "GEMINI_API_KEY" not in st.secrets:
-    st.error("Clé API manquante.")
-    st.stop()
-
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel('models/gemini-2.0-flash')
 
 # --- INITIALISATION ---
-if "xp" not in st.session_state: st.session_state.xp = 0
-if "messages" not in st.session_state: st.session_state.messages = []
-if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
-if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
-if "file_uploader_key" not in st.session_state: st.session_state.file_uploader_key = 0
+for key in ["xp", "messages", "cours_texte", "attente_reponse", "file_uploader_key"]:
+    if key not in st.session_state:
+        st.session_state.xp = 0
+        st.session_state.messages = []
+        st.session_state.cours_texte = None
+        st.session_state.attente_reponse = False
+        st.session_state.file_uploader_key = 0
 
-# Affichage du SCORE FIXE (Placé ici pour être rafraîchi)
+# Score fixe visible
 st.markdown(f'<div class="fixed-score">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Réglages")
-    activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
-    
     if st.button("➕ Nouvelle Leçon / Reset"):
-        st.session_state.xp = 0
-        st.session_state.messages = []
-        st.session_state.cours_texte = None
-        st.session_state.attente_reponse = False
-        st.session_state.file_uploader_key += 1
+        for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
-# --- INTERFACE ---
-st.title(f"✨ Le Coach d'Anaïs")
+st.title("✨ Le Coach d'Anaïs")
 
-fichiers = st.file_uploader("📸 Dépose tes photos de cours :", 
-                            type=['jpg', 'jpeg', 'png'], 
-                            accept_multiple_files=True,
-                            key=f"uploader_{st.session_state.file_uploader_key}")
+# Uploader avec clé pour reset les photos
+fichiers = st.file_uploader("📸 Tes photos :", type=['jpg', 'png'], accept_multiple_files=True, key=f"up_{st.session_state.file_uploader_key}")
 
-# --- LANCEMENT AUTOMATIQUE ---
 if st.button("🚀 LANCER LE QUIZZ"):
-    if not fichiers and st.session_state.cours_texte is None:
-        st.warning("Ajoute une photo d'abord ! 📸")
-    else:
-        with st.spinner("Je prépare ta question, Anaïs..."):
-            if st.session_state.cours_texte is None:
-                photos = [Image.open(f).convert("RGB") for f in fichiers]
-                for p in photos: p.thumbnail((1024, 1024))
-                res_ocr = model.generate_content(["Extrais le texte de ces images."] + photos)
-                st.session_state.cours_texte = res_ocr.text
+    if fichiers or st.session_state.cours_texte:
+        with st.spinner("Je lis ton cours, Anaïs..."):
+            if not st.session_state.cours_texte:
+                # OPTIMISATION TOKENS : Redimensionnement et conversion texte unique
+                imgs = [Image.open(f).convert("RGB") for f in fichiers]
+                for img in imgs: img.thumbnail((1000, 1000))
+                res = model.generate_content(["Extrais tout le texte de ces images.", *imgs])
+                st.session_state.cours_texte = res.text
             
-            st.session_state.messages = []
-            prompt = f"""Tu es le coach personnel d'Anaïs. Savoir : {st.session_state.cours_texte}.
-            MISSION : Pose une question QCM courte. 
-            TON : Très joyeux, encourageant et féminisé.
-            CONSIGNES :
-            - OBLIGATOIRE : Donne 3 options A, B et C.
-            - Ne cite jamais le cours ('le texte dit').
-            - Saute DEUX lignes entre chaque option."""
-            res = model.generate_content(prompt)
-            st.session_state.messages.append({"role": "assistant", "content": res.text})
+            prompt = f"Tu es le coach d'Anaïs (une fille). Savoir : {st.session_state.cours_texte}. Pose un QCM court (A, B, C) avec 2 lignes vides entre les choix. Ton joyeux, pas de 'selon le texte' !"
+            q = model.generate_content(prompt)
+            st.session_state.messages = [{"role": "assistant", "content": q.text}]
             st.session_state.attente_reponse = True
             st.rerun()
 
-# --- CHAT ---
-for i, msg in enumerate(st.session_state.messages):
-    avatar = "🌈" if msg["role"] == "assistant" else "⭐"
-    with st.chat_message(msg["role"], avatar=avatar):
-        c_txt, c_aud = st.columns([0.88, 0.12])
-        with c_txt:
-            st.markdown(msg["content"])
-        with c_aud:
-            if msg["role"] == "assistant":
-                if st.button("🔊", key=f"audio_{i}"):
-                    audio_text = msg["content"].replace("A)", "Choix A,").replace("B)", "Choix B,").replace("C)", "Choix C,")
-                    tts = gTTS(text=audio_text, lang='fr', slow=False)
-                    fp = io.BytesIO()
-                    tts.write_to_fp(fp)
-                    st.audio(fp, format="audio/mp3", autoplay=True)
+# --- AFFICHAGE MESSAGES ---
+for i, m in enumerate(st.session_state.messages):
+    with st.chat_message(m["role"], avatar="🌈" if m["role"]=="assistant" else "⭐"):
+        st.markdown(m["content"])
+        if m["role"] == "assistant" and st.button("🔊", key=f"v_{i}"):
+            tts = gTTS(text=m["content"].replace("A)", "Choix A,"), lang='fr')
+            fp = io.BytesIO()
+            tts.write_to_fp(fp)
+            st.audio(fp, format="audio/mp3", autoplay=True)
 
-# --- ZONE RÉPONSE ---
+# --- ZONE RÉPONSE & SCROLL ---
 if st.session_state.attente_reponse:
     st.write("---")
     c1, c2, c3 = st.columns(3)
-    choix = None
-    if c1.button("A"): choix = "A"
-    if c2.button("B"): choix = "B"
-    if c3.button("C"): choix = "C"
+    res_bouton = None
+    if c1.button("A"): res_bouton = "A"
+    if c2.button("B"): res_bouton = "B"
+    if c3.button("C"): res_bouton = "C"
 
-    if choix:
-        st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
-        st.session_state.attente_reponse = False
+    if res_bouton:
+        st.session_state.messages.append({"role": "user", "content": f"Choix {res_bouton}"})
         with st.spinner("Vérification..."):
-            prompt_v = f"""Savoir : {st.session_state.cours_texte}
-            Question : {st.session_state.messages[-2]['content']}
-            Réponse : {choix}
-            - Si juste : 'BRAVO Anaïs !'. Si faux : 'Oups !'.
-            - Explique court sans citer le cours.
-            - Nouvelle question avec 3 options A, B, C bien espacées."""
+            check_prompt = f"Savoir: {st.session_state.cours_texte}. La réponse {res_bouton} à la question '{st.session_state.messages[-2]['content']}' est-elle juste ? Réponds par OUI ou NON d'abord, puis explique courtement et pose une nouvelle question."
+            v = model.generate_content(check_prompt)
             
-            res = model.generate_content(prompt_v)
-            txt = res.text
-            
-            if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "CHAMPIONNE"]):
+            # Gestion des ballons immédiate
+            if "OUI" in v.text.upper()[:10]:
                 st.session_state.xp += 20
-                if activer_ballons:
-                    st.balloons()
+                st.balloons() # Déclenchement forcé
             
-            st.session_state.messages.append({"role": "assistant", "content": txt})
-            st.session_state.attente_reponse = True
-            
-            # Forcer le scroll vers le bas
-            st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
+            st.session_state.messages.append({"role": "assistant", "content": v.text})
+            # FORCER LE SCROLL EN BAS : On utilise un conteneur vide pour attirer le focus
+            st.markdown('<div id="fin"></div>', unsafe_allow_html=True)
             st.rerun()
-
