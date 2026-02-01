@@ -63,7 +63,7 @@ if st.button("🚀 LANCER LE QUIZZ"):
             CONSIGNES :
             - Ne cite JAMAIS le cours. Ne dis pas 'le texte dit' ou 'selon le cours'.
             - Parle comme si tu savais tout par cœur.
-            - Saute DEUX lignes vides entre chaque option A, B et C pour qu'elles soient bien l'une sous l'autre."""
+            - Saute UNE lignes vides entre chaque option A, B et C pour qu'elles soient bien l'une sous l'autre."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -117,3 +117,4 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             st.rerun() # Le rerun force l'affichage en bas de page
+
