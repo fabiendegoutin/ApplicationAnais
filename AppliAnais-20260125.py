@@ -7,21 +7,23 @@ import io
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
-# CSS pour les boutons, le score fixe ROSE et l'esthétique
+# CSS MIS À JOUR POUR LE SCORE FIXE
 st.markdown(f"""
     <style>
+    /* Badge de score rose fixe, toujours au premier plan */
     .fixed-score {{
         position: fixed;
-        top: 10px;
-        right: 10px;
+        top: 80px; /* Un peu plus bas pour ne pas cacher le menu Streamlit */
+        right: 20px;
         background-color: #FF69B4;
-        padding: 10px 20px;
-        border-radius: 50px;
+        padding: 15px 25px;
+        border-radius: 30px;
         font-weight: bold;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
-        z-index: 999;
-        font-size: 1.2em;
+        box-shadow: 4px 4px 15px rgba(0,0,0,0.3);
+        z-index: 10000; /* Force l'affichage par-dessus tout */
+        font-size: 1.4em;
         color: white;
+        border: 2px solid white;
     }}
     div[data-testid="stHorizontalBlock"] > div:nth-child(1) button {{ background-color: #4CAF50 !important; color: white !important; }}
     div[data-testid="stHorizontalBlock"] > div:nth-child(2) button {{ background-color: #2196F3 !important; color: white !important; }}
@@ -46,7 +48,7 @@ if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
 if "file_uploader_key" not in st.session_state: st.session_state.file_uploader_key = 0
 
-# Affichage du SCORE FIXE
+# Affichage du SCORE FIXE (Placé ici pour être rafraîchi)
 st.markdown(f'<div class="fixed-score">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 
 # --- SIDEBAR ---
@@ -83,12 +85,13 @@ if st.button("🚀 LANCER LE QUIZZ"):
                 st.session_state.cours_texte = res_ocr.text
             
             st.session_state.messages = []
-            prompt = f"""Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}.
-            MISSION : Pose une question QCM courte.
+            prompt = f"""Tu es le coach personnel d'Anaïs. Savoir : {st.session_state.cours_texte}.
+            MISSION : Pose une question QCM courte. 
+            TON : Très joyeux, encourageant et féminisé.
             CONSIGNES :
-            - OBLIGATOIRE : Remplis les 3 options A, B et C. Aucune ne doit être vide.
-            - Saute DEUX lignes entre chaque option.
-            - Ton joyeux et féminisé !"""
+            - OBLIGATOIRE : Donne 3 options A, B et C.
+            - Ne cite jamais le cours ('le texte dit').
+            - Saute DEUX lignes vides entre chaque option."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -127,8 +130,8 @@ if st.session_state.attente_reponse:
             Question : {st.session_state.messages[-2]['content']}
             Réponse : {choix}
             - Si juste : 'BRAVO Anaïs !'. Si faux : 'Oups !'.
-            - Explique court sans citer le texte.
-            - NOUVELLE QUESTION avec 3 options (A, B, C) remplies et espacées par 2 lignes."""
+            - Explique court sans citer le cours.
+            - Nouvelle question avec 3 options A, B, C bien espacées."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
@@ -141,5 +144,6 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             
+            # Forcer le scroll vers le bas
             st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
             st.rerun()
