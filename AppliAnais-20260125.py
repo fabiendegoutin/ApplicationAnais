@@ -91,7 +91,7 @@ if st.button("🚀 LANCER LE QUIZZ"):
             CONSIGNES :
             - OBLIGATOIRE : Donne 3 options A, B et C.
             - Ne cite jamais le cours ('le texte dit').
-            - Saute DEUX lignes vides entre chaque option."""
+            - Saute DEUX lignes entre chaque option."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -147,3 +147,4 @@ if st.session_state.attente_reponse:
             # Forcer le scroll vers le bas
             st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
             st.rerun()
+
