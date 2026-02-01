@@ -58,40 +58,35 @@ if st.button("🚀 LANCER LE QUIZZ"):
                 st.session_state.cours_texte = res_ocr.text
             
             st.session_state.messages = []
-            prompt = f"""Voici les faits : {st.session_state.cours_texte}.
+            prompt = f"""Tu es un coach pédagogique. Voici ton savoir : {st.session_state.cours_texte}.
             MISSION : Pose une question QCM courte.
-            CONSIGNES DE MISE EN PAGE :
-            - Saute UNE lignes vides entre la question et l'option A.
-            - Saute UNE ligne entre chaque option (A, B, C).
-            - Ne dis jamais 'selon le texte'."""
+            CONSIGNES :
+            - Ne cite JAMAIS le cours. Ne dis pas 'le texte dit' ou 'selon le cours'.
+            - Parle comme si tu savais tout par cœur.
+            - Saute DEUX lignes vides entre chaque option A, B et C pour qu'elles soient bien l'une sous l'autre."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
             st.rerun()
 
 # --- CHAT ---
-chat_container = st.container()
-with chat_container:
-    for i, msg in enumerate(st.session_state.messages):
-        avatar = "🌈" if msg["role"] == "assistant" else "⭐"
-        with st.chat_message(msg["role"], avatar=avatar):
-            c_txt, c_aud = st.columns([0.88, 0.12])
-            with c_txt:
-                st.markdown(msg["content"])
-            with c_aud:
-                if msg["role"] == "assistant":
-                    if st.button("🔊", key=f"audio_{i}"):
-                        tts = gTTS(text=msg["content"], lang='fr')
-                        fp = io.BytesIO()
-                        tts.write_to_fp(fp)
-                        st.audio(fp, format="audio/mp3", autoplay=True)
+for i, msg in enumerate(st.session_state.messages):
+    avatar = "🌈" if msg["role"] == "assistant" else "⭐"
+    with st.chat_message(msg["role"], avatar=avatar):
+        c_txt, c_aud = st.columns([0.88, 0.12])
+        with c_txt:
+            st.markdown(msg["content"])
+        with c_aud:
+            if msg["role"] == "assistant":
+                if st.button("🔊", key=f"audio_{i}"):
+                    tts = gTTS(text=msg["content"], lang='fr')
+                    fp = io.BytesIO()
+                    tts.write_to_fp(fp)
+                    st.audio(fp, format="audio/mp3", autoplay=True)
 
 # --- ZONE RÉPONSE ---
 if st.session_state.attente_reponse:
     st.write("---")
-    # Ancre invisible pour forcer le scroll vers le bas
-    st.markdown("<div id='fin'></div>", unsafe_allow_html=True)
-    
     c1, c2, c3 = st.columns(3)
     choix = None
     if c1.button("A"): choix = "A"
@@ -102,20 +97,18 @@ if st.session_state.attente_reponse:
         st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
         st.session_state.attente_reponse = False
         with st.spinner("Vérification..."):
-            prompt_v = f"""Le savoir : {st.session_state.cours_texte}
+            prompt_v = f"""Ton savoir : {st.session_state.cours_texte}
             Question : {st.session_state.messages[-2]['content']}
             Réponse choisie : {choix}
-            1. Si juste : commence ton message par 'BRAVO'.
-            2. Si faux : commence par 'ZUT'. Explique en 2 phrases MAX.
-            3. MISSION : Pose une nouvelle question QCM.
-            CONSIGNES :
-            - Saute UNE ligne vide entre chaque option A, B, C.
-            - Écris les options sur des lignes séparées OBLIGATOIREMENT."""
+            - Si juste : commence par 'BRAVO'.
+            - Si faux : commence par 'ZUT'. Explique en 2 phrases MAX.
+            - INTERDIT : Ne dis pas 'le texte indique' ou 'le cours mentionne'.
+            - Pose ensuite une nouvelle question.
+            - Saute DEUX lignes vides entre chaque option A, B et C."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            # Détection de BRAVO plus robuste pour les ballons
             if "BRAVO" in txt.upper()[:100]:
                 st.session_state.xp += 20
                 if activer_ballons:
@@ -123,5 +116,4 @@ if st.session_state.attente_reponse:
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
-            st.rerun() # Le rerun replace l'utilisateur en bas de page
-
+            st.rerun() # Le rerun force l'affichage en bas de page
