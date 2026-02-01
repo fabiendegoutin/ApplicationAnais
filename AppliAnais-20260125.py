@@ -7,14 +7,14 @@ import io
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
-# CSS pour les boutons, le score fixe et l'esthétique
+# CSS pour les boutons, le score fixe ROSE et l'esthétique
 st.markdown(f"""
     <style>
     .fixed-score {{
         position: fixed;
         top: 10px;
         right: 10px;
-        background-color: #FF69B4; /* Rose pour Anaïs */
+        background-color: #FF69B4;
         padding: 10px 20px;
         border-radius: 50px;
         font-weight: bold;
@@ -83,13 +83,12 @@ if st.button("🚀 LANCER LE QUIZZ"):
                 st.session_state.cours_texte = res_ocr.text
             
             st.session_state.messages = []
-            prompt = f"""Tu es le coach personnel d'Anaïs. Savoir : {st.session_state.cours_texte}.
-            MISSION : Pose une question QCM courte. 
-            TON : Très joyeux, encourageant et féminisé (ex: 'Es-tu prête ?').
+            prompt = f"""Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}.
+            MISSION : Pose une question QCM courte.
             CONSIGNES :
-            - Appelle-la 'Anaïs' de temps en temps.
-            - Ne cite jamais le cours ('le texte dit').
-            - Saute DEUX lignes vides entre A, B et C."""
+            - OBLIGATOIRE : Remplis les 3 options A, B et C. Aucune ne doit être vide.
+            - Saute DEUX lignes entre chaque option.
+            - Ton joyeux et féminisé !"""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -127,19 +126,20 @@ if st.session_state.attente_reponse:
             prompt_v = f"""Savoir : {st.session_state.cours_texte}
             Question : {st.session_state.messages[-2]['content']}
             Réponse : {choix}
-            - Si juste : 'BRAVO Anaïs ! Tu es une championne !'. 
-            - Si faux : 'Oups ! Pas loin Anaïs !'. Explique court sans citer le cours.
-            - Pose une nouvelle question QCM.
-            - Saute DEUX lignes vides entre chaque option A, B et C."""
+            - Si juste : 'BRAVO Anaïs !'. Si faux : 'Oups !'.
+            - Explique court sans citer le texte.
+            - NOUVELLE QUESTION avec 3 options (A, B, C) remplies et espacées par 2 lignes."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "GÉNIAL", "CHAMPIONNE"]):
+            if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "CHAMPIONNE"]):
                 st.session_state.xp += 20
                 if activer_ballons:
                     st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
+            
+            st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
             st.rerun()
