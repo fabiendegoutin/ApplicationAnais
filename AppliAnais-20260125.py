@@ -51,7 +51,6 @@ if st.button("🚀 LANCER LE QUIZZ"):
         st.warning("Ajoute une photo d'abord ! 📸")
     else:
         with st.spinner("Je prépare ta question..."):
-            # Extraction automatique sans clic supplémentaire
             if st.session_state.cours_texte is None:
                 photos = [Image.open(f).convert("RGB") for f in fichiers]
                 for p in photos: p.thumbnail((1024, 1024))
@@ -61,33 +60,38 @@ if st.button("🚀 LANCER LE QUIZZ"):
             st.session_state.messages = []
             prompt = f"""Voici les faits : {st.session_state.cours_texte}.
             MISSION : Pose une question QCM courte.
-            CONSIGNES :
-            - Ne dis JAMAIS 'selon le texte' ou 'd'après le cours'.
-            - Parle des faits comme s'ils étaient une vérité générale.
-            - Saute une ligne vide entre A, B et C."""
+            CONSIGNES DE MISE EN PAGE :
+            - Saute DEUX lignes vides entre la question et l'option A.
+            - Saute UNE ligne vide entre chaque option (A, B, C).
+            - Ne dis jamais 'selon le texte'."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
             st.rerun()
 
 # --- CHAT ---
-for i, msg in enumerate(st.session_state.messages):
-    avatar = "🌈" if msg["role"] == "assistant" else "⭐"
-    with st.chat_message(msg["role"], avatar=avatar):
-        c_txt, c_aud = st.columns([0.88, 0.12])
-        with c_txt:
-            st.markdown(msg["content"])
-        with c_aud:
-            if msg["role"] == "assistant":
-                if st.button("🔊", key=f"audio_{i}"):
-                    tts = gTTS(text=msg["content"], lang='fr')
-                    fp = io.BytesIO()
-                    tts.write_to_fp(fp)
-                    st.audio(fp, format="audio/mp3", autoplay=True)
+chat_container = st.container()
+with chat_container:
+    for i, msg in enumerate(st.session_state.messages):
+        avatar = "🌈" if msg["role"] == "assistant" else "⭐"
+        with st.chat_message(msg["role"], avatar=avatar):
+            c_txt, c_aud = st.columns([0.88, 0.12])
+            with c_txt:
+                st.markdown(msg["content"])
+            with c_aud:
+                if msg["role"] == "assistant":
+                    if st.button("🔊", key=f"audio_{i}"):
+                        tts = gTTS(text=msg["content"], lang='fr')
+                        fp = io.BytesIO()
+                        tts.write_to_fp(fp)
+                        st.audio(fp, format="audio/mp3", autoplay=True)
 
 # --- ZONE RÉPONSE ---
 if st.session_state.attente_reponse:
     st.write("---")
+    # Ancre invisible pour forcer le scroll vers le bas
+    st.markdown("<div id='fin'></div>", unsafe_allow_html=True)
+    
     c1, c2, c3 = st.columns(3)
     choix = None
     if c1.button("A"): choix = "A"
@@ -102,18 +106,21 @@ if st.session_state.attente_reponse:
             Question : {st.session_state.messages[-2]['content']}
             Réponse choisie : {choix}
             1. Si juste : commence ton message par 'BRAVO'.
-            2. Si faux : commence par 'ZUT'. Explique en 2 phrases MAX (sans citer le texte).
-            3. Pose ensuite une nouvelle question avec A, B, C aérés."""
+            2. Si faux : commence par 'ZUT'. Explique en 2 phrases MAX.
+            3. MISSION : Pose une nouvelle question QCM.
+            CONSIGNES :
+            - Saute UNE ligne vide entre chaque option A, B, C.
+            - Écris les options sur des lignes séparées OBLIGATOIREMENT."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            # Détection de BRAVO ultra-large (cherche dans les 50 premiers caractères)
-            if "BRAVO" in txt.upper()[:50]:
+            # Détection de BRAVO plus robuste pour les ballons
+            if "BRAVO" in txt.upper()[:100]:
                 st.session_state.xp += 20
                 if activer_ballons:
                     st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
-            st.rerun() # Scroll automatique vers le bas
+            st.rerun() # Le rerun replace l'utilisateur en bas de page
