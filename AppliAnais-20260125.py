@@ -113,10 +113,10 @@ if st.session_state.attente_reponse:
             Réponse choisie : {choix}
             
             CONSIGNES :
-            1. Si juste : commence par 'BRAVO'.
+            1. Si juste : commence par 'BRAVO'. Explique la bonne réponse en 2 phrases MAXIMUM.
             2. Si faux : commence par 'ZUT'. Explique la bonne réponse en 2 phrases MAXIMUM.
             3. INTERDIT : Ne dis jamais 'Le texte dit que' ou 'D'après le texte'. Parle directement du sujet.
-            4. Pose ensuite une nouvelle question QCM (A, B, C) bien aérée."""
+            4. Pose ensuite une nouvelle question QCM (A, B, C) aérée."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
@@ -131,3 +131,4 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             st.rerun()
+
