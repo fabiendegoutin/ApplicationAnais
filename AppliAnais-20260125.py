@@ -29,55 +29,38 @@ if "attente_reponse" not in st.session_state: st.session_state.attente_reponse =
 st.subheader(f"🚀 Score : {st.session_state.xp} XP")
 st.title("✨ Le Coach d'Anaïs")
 
-# MODIFICATION ICI : Ajout de la capture directe pour les smartphones récents
-fichiers = st.file_uploader(
-    "📸 Prends en photo ton cours :", 
-    type=['jpg', 'jpeg', 'png'], 
-    accept_multiple_files=True,
-    help="Clique ici pour ouvrir l'appareil photo"
-)
+# Uploader optimisé pour smartphones récents
+fichiers = st.file_uploader("📸 Prends ton cours en photo :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
 # --- LOGIQUE QUIZZ ---
 if st.button("🚀 LANCER LE QUIZZ"):
-    # On vérifie si des fichiers sont présents OU si le texte a déjà été extrait
     if fichiers:
-        with st.spinner("Lecture des photos en cours..."):
+        with st.spinner("Je lis tes photos..."):
             try:
-                # OPTIMISATION TOKENS : Lecture unique
-                imgs = []
-                for f in fichiers:
-                    img = Image.open(f).convert("RGB")
-                    img.thumbnail((1024, 1024)) # Réduction de taille pour la rapidité
-                    imgs.append(img)
-                
-                res = model.generate_content(["Extrais le texte de ces images de cours.", *imgs])
+                imgs = [Image.open(f).convert("RGB") for f in fichiers]
+                for img in imgs: img.thumbnail((1024, 1024))
+                res = model.generate_content(["Extrais le texte de ces images.", *imgs])
                 st.session_state.cours_texte = res.text
-                st.success("Photos lues avec succès ! ✅")
-            except Exception as e:
-                st.error("Petit souci avec les photos. Réessaie de les prendre !")
-                st.stop()
-                
+                st.success("Photos reçues ! ✅")
+            except:
+                st.error("Erreur de lecture. Réessaie Anaïs !")
+
     if st.session_state.cours_texte:
-        with st.spinner("Anaïs, je prépare ta question..."):
-            prompt = f"""Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}.
-            CONSIGNES :
-            - Pose UNE SEULE question QCM.
-            - Propose UNIQUEMENT 3 choix : A, B et C. JAMAIS de D.
-            - Saute DEUX lignes vides entre chaque proposition.
-            - Ton joyeux et féminisé."""
+        with st.spinner("Je prépare ta question..."):
+            prompt = f"""Savoir : {st.session_state.cours_texte}. 
+            Tu es le coach d'Anaïs. Pose UNE question QCM (A, B, C uniquement). 
+            Saute 2 lignes entre chaque choix."""
             q = model.generate_content(prompt)
             st.session_state.messages = [{"role": "assistant", "content": q.text}]
             st.session_state.attente_reponse = True
             st.rerun()
-    else:
-        st.warning("Oups ! Je n'ai pas reçu tes photos. Réessaie de les sélectionner. 📸")
 
 # --- CHAT ---
 for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
         st.markdown(msg["content"])
 
-# --- RÉPONSE ET SCROLL ---
+# --- RÉPONSE ---
 if st.session_state.attente_reponse:
     st.markdown('<div id="scroll-anchor"></div>', unsafe_allow_html=True)
     st.write("---")
@@ -90,16 +73,17 @@ if st.session_state.attente_reponse:
     if choix:
         st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
         with st.spinner("Vérification..."):
+            # Changement ici : On force l'IA à dire "Ta réponse"
             prompt_v = f"""Savoir : {st.session_state.cours_texte}. 
-            Question : {st.session_state.messages[-2]['content']}. 
-            Réponse d'Anaïs : {choix}.
-            - Dis si c'est juste, explique courtement.
-            - Pose une NOUVELLE question avec UNIQUEMENT 3 choix (A, B, C).
-            - Saute DEUX lignes vides entre chaque proposition."""
+            Question : {st.session_state.messages[-2]['content']}. Réponse : {choix}.
+            CONSIGNES :
+            - Tu t'adresses à Anaïs. Dis 'Ta réponse est juste' ou 'Ta réponse est incorrecte'.
+            - Explique courtement et pose une NOUVELLE question (A, B, C uniquement).
+            - Saute DEUX lignes entre chaque choix."""
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if any(word in txt.upper()[:30] for word in ["BRAVO", "CORRECT", "JUSTE"]):
+            if any(w in txt.upper()[:30] for w in ["JUSTE", "BRAVO", "CORRECT"]):
                 st.session_state.xp += 20
                 st.balloons()
             
