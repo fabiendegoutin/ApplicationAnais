@@ -69,7 +69,7 @@ if st.button("🚀 LANCER UNE QUESTION"):
         RÈGLE D'OR : La bonne réponse DOIT être présente dans tes options A, B ou C.
         Vérifie deux fois ton information par rapport au texte du cours.
         FORMAT :
-        - Saute une ligne vide entre chaque option A, B et C.
+        - Saute une ligne entre chaque option A, B et C.
         - Ne fais aucune introduction."""
         res = model.generate_content(prompt)
         st.session_state.messages.append({"role": "assistant", "content": res.text})
@@ -124,3 +124,4 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             st.rerun()
+
