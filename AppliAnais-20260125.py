@@ -4,18 +4,16 @@ from PIL import Image
 from gtts import gTTS
 import io
 
-# --- CONFIGURATION VISUELLE ---
+# --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
 st.markdown("""
     <style>
-    /* Boutons de réponse avec couleurs vives et icônes uniformes */
-    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; border-radius: 15px; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; border-radius: 15px; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; border-radius: 15px; }
-    
-    .stButton>button { font-weight: bold; border: none; }
-    .stChatMessage { border-radius: 20px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; }
+    .stButton>button { border-radius: 20px; font-weight: bold; height: 3em; border: none; width: 100%; }
+    .stChatMessage { border-radius: 15px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -33,48 +31,50 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
 
-def preparer_image(image_upload):
-    img = Image.open(image_upload).convert("RGB")
-    img.thumbnail((1024, 1024))
-    return img
+# --- PARAMÈTRES (Sidebar) ---
+with st.sidebar:
+    st.header("⚙️ Options")
+    prenom = st.text_input("Prénom :", value="Anaïs")
+    activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
+    if st.button("🗑️ Effacer le cours"):
+        st.session_state.cours_texte = None
+        st.session_state.messages = []
+        st.rerun()
 
 # --- INTERFACE ---
 st.title(f"✨ Le Coach d'Anaïs")
-st.write(f"🚀 **{st.session_state.xp} XP** — Continue comme ça !")
+st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
 fichiers = st.file_uploader("📸 Photos de la leçon :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
-# --- LOGIQUE DU BOUTON MAGIQUE ---
-if st.button("🚀 LANCER UNE QUESTION"):
-    if not fichiers and not st.session_state.cours_texte:
-        st.warning("Ajoute une photo d'abord ! 📸")
-    else:
-        try:
-            with st.spinner("Je lis ton cours..."):
-                if st.session_state.cours_texte is None:
-                    images_preparees = [preparer_image(f) for f in fichiers]
-                    res_extract = model.generate_content(["Extrais tout le texte de ce cours. Réponds uniquement avec le texte.", images_preparees])
-                    st.session_state.cours_texte = res_extract.text
-                
-                st.session_state.messages = []
-                prompt_q = f"""Cours : {st.session_state.cours_texte}
-                CONSIGNES :
-                - Pose une question QCM courte.
-                - Format : Options A, B, C l'une sous l'autre.
-                - INTERDIT : Ne commence pas par 'Voici une question'. Entre directement dans le vif du sujet.
-                - Finis par un encouragement court."""
-                
-                res_q = model.generate_content(prompt_q)
-                st.session_state.messages.append({"role": "assistant", "content": res_q.text})
-                st.session_state.attente_reponse = True
-                st.rerun()
-        except Exception as e:
-            st.error("L'IA se repose, attends quelques secondes...")
+# --- LOGIQUE : EXTRACTION UNIQUE (ÉCONOMIE DE TOKENS) ---
+if fichiers and st.session_state.cours_texte is None:
+    if st.button("🧠 Mémoriser le cours"):
+        with st.spinner("Analyse des images (une seule fois)..."):
+            photos = [Image.open(f).convert("RGB") for f in fichiers]
+            for p in photos: p.thumbnail((1024, 1024))
+            # On demande à l'IA d'extraire tout le texte
+            res = model.generate_content(["Extrais tout le texte de ces images. Sois très complet.", photos])
+            st.session_state.cours_texte = res.text
+            st.success("✅ Cours mémorisé ! Tu peux ranger tes photos.")
 
-# --- AFFICHAGE CHAT ---
+# --- BOUTON DE JEU ---
+if st.button("🚀 LANCER UNE QUESTION"):
+    if st.session_state.cours_texte is None:
+        st.warning("Mémorise d'abord ton cours ! 🧠")
+    else:
+        st.session_state.messages = []
+        # On envoie le texte extrait au lieu des images (ÉCONOMIE)
+        prompt = f"Cours : {st.session_state.cours_texte}. Pose une question QCM courte (A, B, C) l'une sous l'autre."
+        res = model.generate_content(prompt)
+        st.session_state.messages.append({"role": "assistant", "content": res.text})
+        st.session_state.attente_reponse = True
+        st.rerun()
+
+# --- CHAT ---
 for i, msg in enumerate(st.session_state.messages):
-    icon = "🌈" if msg["role"] == "assistant" else "⭐"
-    with st.chat_message(msg["role"], avatar=icon):
+    avatar = "🌈" if msg["role"] == "assistant" else "⭐"
+    with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
         if msg["role"] == "assistant":
             if st.button("🔊 Écouter", key=f"audio_{i}"):
@@ -86,7 +86,6 @@ for i, msg in enumerate(st.session_state.messages):
 # --- RÉPONSES ---
 if st.session_state.attente_reponse:
     st.write("---")
-    st.write("### Ta réponse :")
     c1, c2, c3 = st.columns(3)
     choix = None
     if c1.button("A"): choix = "A"
@@ -94,30 +93,24 @@ if st.session_state.attente_reponse:
     if c3.button("C"): choix = "C"
 
     if choix:
-        try:
-            st.session_state.messages.append({"role": "user", "content": f"Je choisis la {choix}"})
-            st.session_state.attente_reponse = False
+        st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
+        st.session_state.attente_reponse = False
+        with st.spinner("Vérification..."):
+            # On travaille uniquement sur le texte pour économiser les tokens
+            prompt_v = f"""Cours : {st.session_state.cours_texte}
+            Question : {st.session_state.messages[-2]['content']}
+            Réponse choisie : {choix}
+            Si juste, commence par 'BRAVO'. Si faux, commence par 'ZUT' et explique. 
+            Pose ensuite une nouvelle question QCM (A, B, C) l'une sous l'autre."""
             
-            with st.spinner("Vérification..."):
-                prompt_v = f"""Le cours : {st.session_state.cours_texte}
-                Question posée : {st.session_state.messages[-2]['content']}
-                Réponse d'Anaïs : {choix}
-                
-                MISSION :
-                1. Identifie la VRAIE bonne réponse dans le cours.
-                2. Si Anaïs a juste : Dis "C'est juste !", félicite-la, et donne une nouvelle question QCM.
-                3. Si Anaïs a faux : Dis "Zut ! La bonne réponse était la [Lettre] car [Explication courte]". Donne ensuite une nouvelle question QCM.
-                4. Garde un ton très court et encourageant. Pas de bla-bla inutile au début."""
-                
-                res_coach = model.generate_content(prompt_v)
-                txt = res_coach.text
-                
-                if "juste" in txt.lower() or "bravo" in txt.lower() or "correct" in txt.lower() and "zut" not in txt.lower():
-                    st.session_state.xp += 20
+            res = model.generate_content(prompt_v)
+            txt = res.text
+            
+            if txt.strip().startswith("BRAVO"):
+                st.session_state.xp += 20
+                if activer_ballons: # Option ballons
                     st.balloons()
-                
-                st.session_state.messages.append({"role": "assistant", "content": txt})
-                st.session_state.attente_reponse = True
-                st.rerun()
-        except:
-            st.error("Réessaie dans un instant !")
+            
+            st.session_state.messages.append({"role": "assistant", "content": txt})
+            st.session_state.attente_reponse = True
+            st.rerun()
