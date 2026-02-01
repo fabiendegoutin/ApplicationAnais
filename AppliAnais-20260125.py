@@ -29,7 +29,6 @@ if "attente_reponse" not in st.session_state: st.session_state.attente_reponse =
 st.subheader(f"🚀 Score : {st.session_state.xp} XP")
 st.title("✨ Le Coach d'Anaïs")
 
-# Uploader optimisé pour smartphones récents
 fichiers = st.file_uploader("📸 Prends ton cours en photo :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
 # --- LOGIQUE QUIZZ ---
@@ -47,9 +46,19 @@ if st.button("🚀 LANCER LE QUIZZ"):
 
     if st.session_state.cours_texte:
         with st.spinner("Je prépare ta question..."):
-            prompt = f"""Savoir : {st.session_state.cours_texte}. 
-            Tu es le coach d'Anaïs. Pose UNE question QCM (A, B, C uniquement). 
-            Saute 2 lignes entre chaque choix."""
+            # PROMPT AJUSTÉ POUR LE NIVEAU 6ÈME
+            prompt = f"""Tu es le coach d'Anaïs, une élève de 6ème. 
+            Savoir disponible : {st.session_state.cours_texte}.
+            
+            CONSIGNES DE NIVEAU :
+            - Utilise un vocabulaire très simple (niveau 11-12 ans).
+            - Ne dépasse JAMAIS les connaissances de son cours.
+            - Explique comme un professeur de 6ème patient.
+            
+            FORMAT :
+            - Pose UNE question QCM (A, B, C uniquement). 
+            - Saute 2 lignes entre chaque choix."""
+            
             q = model.generate_content(prompt)
             st.session_state.messages = [{"role": "assistant", "content": q.text}]
             st.session_state.attente_reponse = True
@@ -73,13 +82,16 @@ if st.session_state.attente_reponse:
     if choix:
         st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
         with st.spinner("Vérification..."):
-            # Changement ici : On force l'IA à dire "Ta réponse"
+            # VÉRIFICATION AJUSTÉE POUR LE NIVEAU 6ÈME
             prompt_v = f"""Savoir : {st.session_state.cours_texte}. 
             Question : {st.session_state.messages[-2]['content']}. Réponse : {choix}.
+            
             CONSIGNES :
-            - Tu t'adresses à Anaïs. Dis 'Ta réponse est juste' ou 'Ta réponse est incorrecte'.
-            - Explique courtement et pose une NOUVELLE question (A, B, C uniquement).
-            - Saute DEUX lignes entre chaque choix."""
+            - Adresse-toi directement à Anaïs : 'Ta réponse est juste' ou 'Ta réponse est incorrecte'.
+            - Explique le pourquoi avec des mots très simples de 6ème.
+            - Reste uniquement sur les informations de son cours.
+            - Pose une NOUVELLE question QCM (A, B, C uniquement) bien espacée."""
+            
             res = model.generate_content(prompt_v)
             txt = res.text
             
