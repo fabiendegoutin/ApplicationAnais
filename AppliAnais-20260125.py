@@ -49,7 +49,7 @@ if st.button("🚀 LANCER LE QUIZZ"):
                 res = model.generate_content(["Extrais le texte de ces images.", *imgs])
                 st.session_state.cours_texte = res.text
             
-            prompt = f"Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}. Pose UNE question QCM courte. Structure : Question, puis Choix A, B et C bien séparés par 2 lignes vides."
+            prompt = f"Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}. Pose UNE question QCM courte. Structure : Question, puis Choix A, B et C bien séparés par 1 ligne vide."
             q = model.generate_content(prompt)
             st.session_state.messages = [{"role": "assistant", "content": q.text}]
             st.session_state.attente_reponse = True
@@ -86,3 +86,4 @@ if st.session_state.attente_reponse:
             st.markdown('<div id="end"></div>', unsafe_allow_html=True)
             st.markdown('<script>document.getElementById("end").scrollIntoView({behavior: "smooth"});</script>', unsafe_allow_html=True)
             st.rerun()
+
