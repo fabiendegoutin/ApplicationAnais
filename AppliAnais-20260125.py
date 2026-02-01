@@ -7,7 +7,6 @@ import io
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 
-# Style des boutons A, B, C
 st.markdown("""
     <style>
     div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; }
@@ -27,30 +26,28 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
 
-# Score en haut à droite (simple texte pour éviter les bugs de scroll)
-st.sidebar.metric("Score Anaïs", f"{st.session_state.xp} XP")
-
+st.subheader(f"🚀 Score : {st.session_state.xp} XP")
 st.title("✨ Le Coach d'Anaïs")
 
-fichiers = st.file_uploader("📸 Photos de ton cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+fichiers = st.file_uploader("📸 Photos du cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
 # --- LOGIQUE QUIZZ ---
 if st.button("🚀 LANCER LE QUIZZ"):
     if fichiers or st.session_state.cours_texte:
         with st.spinner("Lecture du cours..."):
             if st.session_state.cours_texte is None:
-                # Optimisation : Lecture unique
+                # OPTIMISATION TOKENS : Lecture unique
                 imgs = [Image.open(f).convert("RGB") for f in fichiers]
                 for img in imgs: img.thumbnail((1024, 1024))
                 res = model.generate_content(["Extrais le texte de ces images.", *imgs])
                 st.session_state.cours_texte = res.text
             
             prompt = f"""Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}.
-            CONSIGNES STRICTES :
+            CONSIGNES :
             - Pose UNE SEULE question QCM.
-            - Propose UNIQUEMENT 3 choix : A, B et C. Jamais de D.
-            - Saute DEUX lignes vides entre la question et les choix.
-            - Saute DEUX lignes vides entre chaque choix."""
+            - Propose UNIQUEMENT 3 choix : A, B et C. JAMAIS de D.
+            - Saute DEUX lignes vides entre chaque proposition pour Anaïs.
+            - Ton joyeux et féminisé."""
             q = model.generate_content(prompt)
             st.session_state.messages = [{"role": "assistant", "content": q.text}]
             st.session_state.attente_reponse = True
@@ -58,12 +55,13 @@ if st.button("🚀 LANCER LE QUIZZ"):
 
 # --- CHAT ---
 for i, msg in enumerate(st.session_state.messages):
-    avatar = "🌈" if msg["role"] == "assistant" else "⭐"
-    with st.chat_message(msg["role"], avatar=avatar):
+    with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
         st.markdown(msg["content"])
 
-# --- BOUTONS RÉPONSE ---
+# --- RÉPONSE ET SCROLL ---
 if st.session_state.attente_reponse:
+    # Ancre invisible pour le scroll
+    st.markdown('<div id="scroll-anchor"></div>', unsafe_allow_html=True)
     st.write("---")
     c1, c2, c3 = st.columns(3)
     choix = None
@@ -76,15 +74,19 @@ if st.session_state.attente_reponse:
         with st.spinner("Vérification..."):
             prompt_v = f"""Savoir : {st.session_state.cours_texte}. 
             Question : {st.session_state.messages[-2]['content']}. 
-            Réponse : {choix}.
+            Réponse d'Anaïs : {choix}.
             - Dis si c'est juste, explique courtement.
             - Pose une NOUVELLE question avec UNIQUEMENT 3 choix (A, B, C).
-            - Saute beaucoup d'espace entre les lignes."""
+            - Saute DEUX lignes vides entre chaque proposition."""
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if "JUSTE" in txt.upper() or "BRAVO" in txt.upper() or "CORRECT" in txt.upper():
+            if any(word in txt.upper()[:30] for word in ["BRAVO", "CORRECT", "JUSTE"]):
                 st.session_state.xp += 20
+                # On tente quand même les ballons, au cas où !
+                st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
+            # Tentative de scroll automatique par injection JS
+            st.markdown('<script>document.getElementById("scroll-anchor").scrollIntoView({behavior: "smooth"});</script>', unsafe_allow_html=True)
             st.rerun()
