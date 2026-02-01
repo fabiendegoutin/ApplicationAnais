@@ -7,13 +7,27 @@ import io
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
-st.markdown("""
+# CSS pour les boutons, le score fixe et l'esthétique
+st.markdown(f"""
     <style>
-    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; }
-    .stButton>button { border-radius: 20px; font-weight: bold; height: 3em; border: none; width: 100%; }
-    .stChatMessage { border-radius: 15px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
+    .fixed-score {{
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background-color: #FF69B4; /* Rose pour Anaïs */
+        padding: 10px 20px;
+        border-radius: 50px;
+        font-weight: bold;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+        z-index: 999;
+        font-size: 1.2em;
+        color: white;
+    }}
+    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button {{ background-color: #4CAF50 !important; color: white !important; }}
+    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button {{ background-color: #2196F3 !important; color: white !important; }}
+    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button {{ background-color: #9C27B0 !important; color: white !important; }}
+    .stButton>button {{ border-radius: 20px; font-weight: bold; height: 3em; border: none; width: 100%; }}
+    .stChatMessage {{ border-radius: 15px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -32,27 +46,25 @@ if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
 if "file_uploader_key" not in st.session_state: st.session_state.file_uploader_key = 0
 
+# Affichage du SCORE FIXE
+st.markdown(f'<div class="fixed-score">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Réglages")
     activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
     
-    # CORRECTION DU RESET
     if st.button("➕ Nouvelle Leçon / Reset"):
-        # On réinitialise manuellement les variables clés au lieu de tout vider
         st.session_state.xp = 0
         st.session_state.messages = []
         st.session_state.cours_texte = None
         st.session_state.attente_reponse = False
-        # On change la clé pour effacer les photos de l'écran
         st.session_state.file_uploader_key += 1
         st.rerun()
 
 # --- INTERFACE ---
 st.title(f"✨ Le Coach d'Anaïs")
-st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
-# Uploader avec clé dynamique pour le reset
 fichiers = st.file_uploader("📸 Dépose tes photos de cours :", 
                             type=['jpg', 'jpeg', 'png'], 
                             accept_multiple_files=True,
@@ -63,8 +75,7 @@ if st.button("🚀 LANCER LE QUIZZ"):
     if not fichiers and st.session_state.cours_texte is None:
         st.warning("Ajoute une photo d'abord ! 📸")
     else:
-        with st.spinner("Je prépare ta question..."):
-            # L'optimisation des tokens est ici : on ne lit les images qu'une fois
+        with st.spinner("Je prépare ta question, Anaïs..."):
             if st.session_state.cours_texte is None:
                 photos = [Image.open(f).convert("RGB") for f in fichiers]
                 for p in photos: p.thumbnail((1024, 1024))
@@ -72,12 +83,13 @@ if st.button("🚀 LANCER LE QUIZZ"):
                 st.session_state.cours_texte = res_ocr.text
             
             st.session_state.messages = []
-            prompt = f"""Tu es un coach joyeux et enthousiaste ! Savoir : {st.session_state.cours_texte}.
-            MISSION : Pose une question QCM courte.
+            prompt = f"""Tu es le coach personnel d'Anaïs. Savoir : {st.session_state.cours_texte}.
+            MISSION : Pose une question QCM courte. 
+            TON : Très joyeux, encourageant et féminisé (ex: 'Es-tu prête ?').
             CONSIGNES :
-            - Ton dynamique avec des points d'exclamation !
-            - Ne dis JAMAIS 'selon le texte' ou 'd'après le cours'.
-            - Saute UNE ligne entre chaque option A, B et C."""
+            - Appelle-la 'Anaïs' de temps en temps.
+            - Ne cite jamais le cours ('le texte dit').
+            - Saute DEUX lignes vides entre A, B et C."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -114,24 +126,20 @@ if st.session_state.attente_reponse:
         with st.spinner("Vérification..."):
             prompt_v = f"""Savoir : {st.session_state.cours_texte}
             Question : {st.session_state.messages[-2]['content']}
-            Réponse choisie : {choix}
-            - Si juste : commence par 'BRAVO ! C'est super !'.
-            - Si faux : commence par 'Oups ! Presque !'. Explique en 2 phrases MAX.
-            - Pose ensuite une nouvelle question QCM.
+            Réponse : {choix}
+            - Si juste : 'BRAVO Anaïs ! Tu es une championne !'. 
+            - Si faux : 'Oups ! Pas loin Anaïs !'. Explique court sans citer le cours.
+            - Pose une nouvelle question QCM.
             - Saute DEUX lignes vides entre chaque option A, B et C."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            # Détection ultra-fiable des ballons
-            if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "GÉNIAL", "OUIII"]):
+            if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "GÉNIAL", "CHAMPIONNE"]):
                 st.session_state.xp += 20
-                if activer_ballons:
+               # if activer_ballons:
                     st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
-            
-            # JavaScript pour le scroll automatique vers le bas
-            st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
             st.rerun()
