@@ -9,13 +9,12 @@ st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered
 
 st.markdown("""
     <style>
-    /* Boutons de réponse colorés */
-    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; border: none; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; border: none; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; border: none; }
+    /* Boutons de réponse avec couleurs vives et icônes uniformes */
+    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; border-radius: 15px; }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; border-radius: 15px; }
+    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; border-radius: 15px; }
     
-    /* Style général */
-    .stButton>button { border-radius: 20px; font-weight: bold; }
+    .stButton>button { font-weight: bold; border: none; }
     .stChatMessage { border-radius: 20px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
@@ -41,9 +40,9 @@ def preparer_image(image_upload):
 
 # --- INTERFACE ---
 st.title(f"✨ Le Coach d'Anaïs")
-st.write(f"🚀 **{st.session_state.xp} XP** — Tu es une championne !")
+st.write(f"🚀 **{st.session_state.xp} XP** — Continue comme ça !")
 
-fichiers = st.file_uploader("📸 Dépose tes photos de cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+fichiers = st.file_uploader("📸 Photos de la leçon :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
 # --- LOGIQUE DU BOUTON MAGIQUE ---
 if st.button("🚀 LANCER UNE QUESTION"):
@@ -51,32 +50,29 @@ if st.button("🚀 LANCER UNE QUESTION"):
         st.warning("Ajoute une photo d'abord ! 📸")
     else:
         try:
-            with st.spinner("Lecture du cours..."):
+            with st.spinner("Je lis ton cours..."):
                 if st.session_state.cours_texte is None:
                     images_preparees = [preparer_image(f) for f in fichiers]
-                    prompt_extract = "Extrais tout le texte de ce cours de 6ème. Ne réponds que le texte brut."
-                    res_extract = model.generate_content([prompt_extract] + images_preparees)
+                    res_extract = model.generate_content(["Extrais tout le texte de ce cours. Réponds uniquement avec le texte.", images_preparees])
                     st.session_state.cours_texte = res_extract.text
                 
                 st.session_state.messages = []
-                # PROMPT AMÉLIORÉ
                 prompt_q = f"""Cours : {st.session_state.cours_texte}
-                CONSIGNES STRICTES :
-                - Pose une question QCM sur ce cours.
-                - Format : Une option par ligne (A, B, C).
-                - NE DIS RIEN AVANT LA QUESTION (Pas de 'Voici une question').
-                - Termine par un petit mot d'encouragement pour Anaïs."""
+                CONSIGNES :
+                - Pose une question QCM courte.
+                - Format : Options A, B, C l'une sous l'autre.
+                - INTERDIT : Ne commence pas par 'Voici une question'. Entre directement dans le vif du sujet.
+                - Finis par un encouragement court."""
                 
                 res_q = model.generate_content(prompt_q)
                 st.session_state.messages.append({"role": "assistant", "content": res_q.text})
                 st.session_state.attente_reponse = True
                 st.rerun()
         except Exception as e:
-            st.error(f"L'IA fait une pause, réessaie dans 20 secondes ! ({e})")
+            st.error("L'IA se repose, attends quelques secondes...")
 
-# --- CHAT ---
+# --- AFFICHAGE CHAT ---
 for i, msg in enumerate(st.session_state.messages):
-    # Changement des icônes pour plus de peps
     icon = "🌈" if msg["role"] == "assistant" else "⭐"
     with st.chat_message(msg["role"], avatar=icon):
         st.markdown(msg["content"])
@@ -93,28 +89,30 @@ if st.session_state.attente_reponse:
     st.write("### Ta réponse :")
     c1, c2, c3 = st.columns(3)
     choix = None
-    if c1.button("🅰️ OPTION A"): choix = "A"
-    if c2.button("🅱️ OPTION B"): choix = "B"
-    if c3.button("🅲 OPTION C"): choix = "C"
+    if c1.button("A"): choix = "A"
+    if c2.button("B"): choix = "B"
+    if c3.button("C"): choix = "C"
 
     if choix:
         try:
             st.session_state.messages.append({"role": "user", "content": f"Je choisis la {choix}"})
             st.session_state.attente_reponse = False
+            
             with st.spinner("Vérification..."):
                 prompt_v = f"""Le cours : {st.session_state.cours_texte}
-                Question : {st.session_state.messages[-2]['content']}
-                Réponse choisie : {choix}
-                DIRECTIVES :
-                - Vérifie si c'est la bonne réponse par rapport au cours.
-                - Si faux, explique pourquoi sans être sévère.
-                - Pose ensuite une NOUVELLE question QCM (A, B, C) avec une option par ligne.
-                - JAMAIS de phrases d'introduction type 'Voici la réponse'."""
+                Question posée : {st.session_state.messages[-2]['content']}
+                Réponse d'Anaïs : {choix}
+                
+                MISSION :
+                1. Identifie la VRAIE bonne réponse dans le cours.
+                2. Si Anaïs a juste : Dis "C'est juste !", félicite-la, et donne une nouvelle question QCM.
+                3. Si Anaïs a faux : Dis "Zut ! La bonne réponse était la [Lettre] car [Explication courte]". Donne ensuite une nouvelle question QCM.
+                4. Garde un ton très court et encourageant. Pas de bla-bla inutile au début."""
                 
                 res_coach = model.generate_content(prompt_v)
                 txt = res_coach.text
                 
-                if any(w in txt.lower() for w in ["bravo", "juste", "correct", "excellent"]):
+                if "juste" in txt.lower() or "bravo" in txt.lower() or "correct" in txt.lower() and "zut" not in txt.lower():
                     st.session_state.xp += 20
                     st.balloons()
                 
@@ -122,4 +120,4 @@ if st.session_state.attente_reponse:
                 st.session_state.attente_reponse = True
                 st.rerun()
         except:
-            st.error("Petit souci de connexion, réessaie !")
+            st.error("Réessaie dans un instant !")
