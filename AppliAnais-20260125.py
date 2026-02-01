@@ -5,27 +5,23 @@ from gtts import gTTS
 import io
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
+st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
-# CSS pour le score rose fixe et l'interface
 st.markdown("""
     <style>
-    .fixed-score {
-        position: fixed; top: 10px; right: 10px;
-        background-color: #FF69B4; color: white;
-        padding: 10px 20px; border-radius: 30px;
-        font-weight: bold; z-index: 1000;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
-    }
-    .stButton>button { border-radius: 20px; font-weight: bold; height: 3em; width: 100%; }
-    /* Couleurs des boutons A, B, C */
     div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; }
     div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; }
     div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; }
+    .stButton>button { border-radius: 20px; font-weight: bold; height: 3em; border: none; width: 100%; }
+    .stChatMessage { border-radius: 15px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
 # Connexion API
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("Clé API manquante.")
+    st.stop()
+
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel('models/gemini-2.0-flash')
 
@@ -34,66 +30,66 @@ if "xp" not in st.session_state: st.session_state.xp = 0
 if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
-if "file_key" not in st.session_state: st.session_state.file_key = 0
-
-# Score toujours visible
-st.markdown(f'<div class="fixed-score">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Réglages")
-    if st.button("➕ Nouveau cours (Reset)"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
+    activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
+    if st.button("➕ Nouvelle Leçon / Reset"):
+        st.session_state.clear()
         st.rerun()
 
-st.title("✨ Le Coach d'Anaïs")
+# --- INTERFACE ---
+st.title(f"✨ Le Coach d'Anaïs")
+st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
-# Uploader
-fichiers = st.file_uploader("📸 Dépose tes photos de cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True, key=f"up_{st.session_state.file_key}")
+fichiers = st.file_uploader("📸 Dépose tes photos de cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
-# --- LOGIQUE QUIZZ ---
+# --- LANCEMENT AUTOMATIQUE ---
 if st.button("🚀 LANCER LE QUIZZ"):
     if not fichiers and st.session_state.cours_texte is None:
         st.warning("Ajoute une photo d'abord ! 📸")
     else:
-        with st.spinner("Anaïs, je prépare ta question..."):
+        with st.spinner("Je prépare ta question, Anaïs..."):
             if st.session_state.cours_texte is None:
-                # OPTIMISATION TOKENS : Lecture unique des images
                 photos = [Image.open(f).convert("RGB") for f in fichiers]
                 for p in photos: p.thumbnail((1024, 1024))
-                res_ocr = model.generate_content(["Extrais le texte de ce cours.", *photos])
+                res_ocr = model.generate_content(["Extrais le texte de ces images."] + photos)
                 st.session_state.cours_texte = res_ocr.text
             
-            # PROMPT STRICT : Une seule question QCM
-            prompt = f"""Tu es le coach d'Anaïs. Savoir : {st.session_state.cours_texte}.
+            st.session_state.messages = []
+            prompt = f"""Voici les faits : {st.session_state.cours_texte}.
+            MISSION : Pose une SEULE question QCM courte à Anaïs.
             CONSIGNES :
-            - Pose UNE SEULE question QCM courte.
-            - Propose obligatoirement 3 choix : A, B et C.
-            - Saute DEUX lignes entre chaque choix.
+            - Saute DEUX lignes vides entre la question et les choix.
+            - Saute DEUX lignes vides entre chaque choix A, B et C pour qu'ils ne soient pas collés.
             - Ton joyeux et féminisé."""
             res = model.generate_content(prompt)
-            st.session_state.messages = [{"role": "assistant", "content": res.text}]
+            st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
             st.rerun()
 
-# --- AFFICHAGE ---
+# --- CHAT ---
 for i, msg in enumerate(st.session_state.messages):
     avatar = "🌈" if msg["role"] == "assistant" else "⭐"
     with st.chat_message(msg["role"], avatar=avatar):
-        st.markdown(msg["content"])
-        if msg["role"] == "assistant":
-            if st.button("🔊", key=f"audio_{i}"):
-                tts = gTTS(text=msg["content"].replace("A)", "Choix A,"), lang='fr')
-                fp = io.BytesIO()
-                tts.write_to_fp(fp)
-                st.audio(fp, format="audio/mp3", autoplay=True)
+        c_txt, c_aud = st.columns([0.88, 0.12])
+        with c_txt:
+            st.markdown(msg["content"])
+        with c_aud:
+            if msg["role"] == "assistant":
+                if st.button("🔊", key=f"audio_{i}"):
+                    tts = gTTS(text=msg["content"], lang='fr')
+                    fp = io.BytesIO()
+                    tts.write_to_fp(fp)
+                    st.audio(fp, format="audio/mp3", autoplay=True)
 
-# --- ZONE RÉPONSE AVEC SCROLL ---
+# --- ZONE RÉPONSE ---
 if st.session_state.attente_reponse:
-    st.write("---")
-    # Ancre pour le scroll automatique
-    st.markdown('<div id="reponse"></div>', unsafe_allow_html=True)
+    # Élément d'ancrage pour le scroll
+    st.markdown('<div id="fin-de-page"></div>', unsafe_allow_html=True)
     
+    st.write("---")
     c1, c2, c3 = st.columns(3)
     choix = None
     if c1.button("A"): choix = "A"
@@ -102,21 +98,28 @@ if st.session_state.attente_reponse:
 
     if choix:
         st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
+        st.session_state.attente_reponse = False
         with st.spinner("Vérification..."):
-            prompt_v = f"""Savoir : {st.session_state.cours_texte}.
-            Question : {st.session_state.messages[-2]['content']}.
-            Réponse : {choix}.
-            - Commence par 'CORRECT' ou 'INCORRECT'.
-            - Explique courtement.
-            - Pose UNE nouvelle question QCM (3 choix A, B, C)."""
+            prompt_v = f"""Le savoir : {st.session_state.cours_texte}
+            Question : {st.session_state.messages[-2]['content']}
+            Réponse choisie : {choix}
+            1. Si juste : commence par 'BRAVO'.
+            2. Si faux : commence par 'ZUT'.
+            3. Explique courtement et pose une NOUVELLE question.
+            4. IMPORTANT : Saute DEUX lignes vides entre chaque choix A, B, C."""
+            
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if "CORRECT" in txt.upper()[:15]:
+            # Détection de succès élargie pour les ballons
+            if any(mot in txt.upper()[:50] for mot in ["BRAVO", "CORRECT", "GÉNIAL"]):
                 st.session_state.xp += 20
-                st.balloons()
+                if activer_ballons:
+                    st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
-            # Force le scroll vers l'ancre "reponse"
-            st.markdown('<script>document.getElementById("reponse").scrollIntoView();</script>', unsafe_allow_html=True)
+            st.session_state.attente_reponse = True
+            
+            # JavaScript pour forcer le scroll vers l'ancre
+            st.markdown('<script>document.getElementById("fin-de-page").scrollIntoView();</script>', unsafe_allow_html=True)
             st.rerun()
