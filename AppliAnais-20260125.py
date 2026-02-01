@@ -73,12 +73,35 @@ else:
 # --- ÉTAPE 2 : LOGIQUE DU QUIZ ---
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("🚀 LANCER UNE QUESTION") and st.session_state.cours_texte:
-        st.session_state.messages = []
-        prompt_q = f"Basé sur ce cours : '{st.session_state.cours_texte}', pose une seule question QCM (A, B, C) courte à {prenom} (6ème, TDAH). Sois très encourageant."
-        res = model.generate_content(prompt_q)
-        st.session_state.messages.append({"role": "assistant", "content": res.text})
-        st.session_state.attente_reponse = True
+    # --- ÉTAPE 2 : LOGIQUE DU QUIZ AUTOMATISÉE ---
+if st.session_state.cours_texte:
+    st.info("✅ Le cours est en mémoire. Prête pour un défi ?")
+    
+    if st.button("🚀 LANCER UNE QUESTION"):
+        st.session_state.messages = [] # On vide pour une nouvelle question
+        with st.spinner("Je prépare ta question..."):
+            prompt_q = f"Basé sur ce cours : '{st.session_state.cours_texte}', pose une seule question QCM (A, B, C) courte à {prenom} (6ème, TDAH). Sois très encourageant et utilise des emojis."
+            try:
+                res = model.generate_content(prompt_q)
+                st.session_state.messages.append({"role": "assistant", "content": res.text})
+                st.session_state.attente_reponse = True
+                st.rerun() # On force l'affichage de la question
+            except Exception as e:
+                st.error(f"Zut, petit souci technique : {e}")
+
+    else:
+        # Si le texte n'est pas encore extrait, on propose de le faire
+        if fichiers:
+            if st.button("🧠 ÉTAPE 1 : Apprendre ma leçon"):
+                with st.spinner("Lecture des photos..."):
+                    photos = [Image.open(f).convert("RGB") for f in fichiers]
+                    prompt_extract = "Analyse ces images et extrais tout le contenu pédagogique. Ne réponds que le texte."
+                    res = model.generate_content([prompt_extract] + photos)
+                    st.session_state.cours_texte = res.text
+                    st.success("C'est bon ! Appuie maintenant sur Lancer !")
+                    st.rerun()
+    else:
+        st.warning("Commence par ajouter une photo de ta leçon en haut ! 📸")
 
 with col2:
     if st.button("🏁 RÉSUMÉ"):
@@ -123,3 +146,4 @@ if st.session_state.attente_reponse:
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
             st.rerun()
+
