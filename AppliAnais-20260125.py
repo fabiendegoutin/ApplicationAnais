@@ -30,20 +30,27 @@ if "xp" not in st.session_state: st.session_state.xp = 0
 if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "attente_reponse" not in st.session_state: st.session_state.attente_reponse = False
+if "file_uploader_key" not in st.session_state: st.session_state.file_uploader_key = 0
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Réglages")
     activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
     if st.button("➕ Nouvelle Leçon / Reset"):
+        # On vide tout et on change la clé de l'uploader pour effacer les fichiers
         st.session_state.clear()
+        st.session_state.file_uploader_key += 1
         st.rerun()
 
 # --- INTERFACE ---
 st.title(f"✨ Le Coach d'Anaïs")
 st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
-fichiers = st.file_uploader("📸 Dépose tes photos de cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+# Utilisation d'une clé dynamique pour forcer la remise à zéro de l'uploader
+fichiers = st.file_uploader("📸 Dépose tes photos de cours :", 
+                            type=['jpg', 'jpeg', 'png'], 
+                            accept_multiple_files=True,
+                            key=f"uploader_{st.session_state.file_uploader_key}")
 
 # --- LANCEMENT AUTOMATIQUE ---
 if st.button("🚀 LANCER LE QUIZZ"):
@@ -58,12 +65,12 @@ if st.button("🚀 LANCER LE QUIZZ"):
                 st.session_state.cours_texte = res_ocr.text
             
             st.session_state.messages = []
-            prompt = f"""Tu es un coach pédagogique. Voici ton savoir : {st.session_state.cours_texte}.
+            prompt = f"""Tu es un coach joyeux et enthousiaste ! Savoir : {st.session_state.cours_texte}.
             MISSION : Pose une question QCM courte.
             CONSIGNES :
-            - Ne cite JAMAIS le cours. Ne dis pas 'le texte dit' ou 'selon le cours'.
-            - Parle comme si tu savais tout par cœur.
-            - Saute UNE lignes vides entre chaque option A, B et C pour qu'elles soient bien l'une sous l'autre."""
+            - Utilise un ton dynamique avec des points d'exclamation !
+            - Ne cite JAMAIS le cours.
+            - Saute DEUX lignes vides entre chaque option A, B et C."""
             res = model.generate_content(prompt)
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.session_state.attente_reponse = True
@@ -79,7 +86,8 @@ for i, msg in enumerate(st.session_state.messages):
         with c_aud:
             if msg["role"] == "assistant":
                 if st.button("🔊", key=f"audio_{i}"):
-                    tts = gTTS(text=msg["content"], lang='fr')
+                    audio_text = msg["content"].replace("A)", "Choix A,").replace("B)", "Choix B,").replace("C)", "Choix C,")
+                    tts = gTTS(text=audio_text, lang='fr', slow=False)
                     fp = io.BytesIO()
                     tts.write_to_fp(fp)
                     st.audio(fp, format="audio/mp3", autoplay=True)
@@ -97,24 +105,24 @@ if st.session_state.attente_reponse:
         st.session_state.messages.append({"role": "user", "content": f"Choix {choix}"})
         st.session_state.attente_reponse = False
         with st.spinner("Vérification..."):
-            prompt_v = f"""Ton savoir : {st.session_state.cours_texte}
+            prompt_v = f"""Savoir : {st.session_state.cours_texte}
             Question : {st.session_state.messages[-2]['content']}
             Réponse choisie : {choix}
-            - Si juste : commence par 'BRAVO'.
-            - Si faux : commence par 'ZUT'. Explique en 2 phrases MAX.
-            - INTERDIT : Ne dis pas 'le texte indique' ou 'le cours mentionne'.
+            - Si juste : commence par 'BRAVO ! C'est super !'.
+            - Si faux : commence par 'Oups ! Presque !'. Explique en 2 phrases MAX.
             - Pose ensuite une nouvelle question.
-            - Saute DEUX lignes vides entre chaque option A, B et C."""
+            - Saute UNE ligne entre chaque option A, B et C."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            if "BRAVO" in txt.upper()[:100]:
+            if any(word in txt.upper()[:50] for word in ["BRAVO", "SUPER", "GÉNIAL"]):
                 st.session_state.xp += 20
                 if activer_ballons:
                     st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
-            st.rerun() # Le rerun force l'affichage en bas de page
-
+            
+            st.markdown("<script>window.scrollTo(0, document.body.scrollHeight);</script>", unsafe_allow_html=True)
+            st.rerun()
