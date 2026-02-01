@@ -138,8 +138,9 @@ if st.session_state.attente_reponse:
             if any(word in txt.upper()[:100] for word in ["BRAVO", "SUPER", "GÉNIAL", "CHAMPIONNE"]):
                 st.session_state.xp += 20
                # if activer_ballons:
-                    st.balloons()
+                st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
             st.rerun()
+
