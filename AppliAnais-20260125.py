@@ -7,7 +7,6 @@ import io
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach Magique d'Anaïs 🌟", layout="centered")
 
-# CSS pour les boutons et le scroll automatique
 st.markdown("""
     <style>
     div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; }
@@ -36,6 +35,7 @@ if "attente_reponse" not in st.session_state: st.session_state.attente_reponse =
 with st.sidebar:
     st.header("⚙️ Réglages")
     activer_ballons = st.toggle("Activer les ballons 🎈", value=True)
+    st.write("---")
     if st.button("➕ Nouvelle Leçon / Reset"):
         st.session_state.clear()
         st.rerun()
@@ -46,44 +46,49 @@ st.write(f"🚀 **Score : {st.session_state.xp} XP**")
 
 fichiers = st.file_uploader("📸 Dépose tes photos de cours :", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
-# --- LANCEMENT ---
+# --- LOGIQUE D'EXTRACTION (OPTIMISATION TOKENS) ---
+if fichiers and st.session_state.cours_texte is None:
+    if st.button("📖 Lire le cours"):
+        with st.spinner("Analyse du cours..."):
+            photos = [Image.open(f).convert("RGB") for f in fichiers]
+            for p in photos: p.thumbnail((1024, 1024))
+            res_ocr = model.generate_content(["Extrais tout le texte de ces images. Sois ultra-fidèle."] + photos)
+            st.session_state.cours_texte = res_ocr.text
+            st.success("✅ Cours mémorisé !")
+
+# --- LANCER UNE QUESTION ---
 if st.button("🚀 LANCER UNE QUESTION"):
-    if not fichiers and st.session_state.cours_texte is None:
-        st.warning("Ajoute une photo d'abord ! 📸")
+    if st.session_state.cours_texte is None:
+        st.warning("Ajoute une photo et clique sur 'Lire le cours' ! 📸")
     else:
-        with st.spinner("Je lis ton cours..."):
-            if st.session_state.cours_texte is None:
-                photos = [Image.open(f).convert("RGB") for f in fichiers]
-                for p in photos: p.thumbnail((1024, 1024))
-                res_ocr = model.generate_content(["Extrais le texte de ces images."] + photos)
-                st.session_state.cours_texte = res_ocr.text
-            
-            st.session_state.messages = []
-            prompt = f"Cours : {st.session_state.cours_texte}. Pose une question QCM courte. Saute une ligne vide entre A, B et C."
-            res = model.generate_content(prompt)
-            st.session_state.messages.append({"role": "assistant", "content": res.text})
-            st.session_state.attente_reponse = True
-            st.rerun()
+        st.session_state.messages = []
+        prompt = f"""Cours : {st.session_state.cours_texte}.
+        MISSION : Pose une question QCM courte basée EXCLUSIVEMENT sur le texte fourni.
+        CONSIGNES :
+        - La bonne réponse DOIT être dans les choix A, B ou C.
+        - INTERDIT d'utiliser des connaissances hors du texte.
+        - Saute une ligne vide entre chaque option A, B et C."""
+        res = model.generate_content(prompt)
+        st.session_state.messages.append({"role": "assistant", "content": res.text})
+        st.session_state.attente_reponse = True
+        st.rerun()
 
 # --- CHAT ---
-# Conteneur pour forcer le scroll vers le bas
-chat_container = st.container()
-with chat_container:
-    for i, msg in enumerate(st.session_state.messages):
-        avatar = "🌈" if msg["role"] == "assistant" else "⭐"
-        with st.chat_message(msg["role"], avatar=avatar):
-            c_txt, c_aud = st.columns([0.88, 0.12])
-            with c_txt:
-                st.markdown(msg["content"])
-            with c_aud:
-                if msg["role"] == "assistant":
-                    if st.button("🔊", key=f"audio_{i}"):
-                        tts = gTTS(text=msg["content"], lang='fr')
-                        fp = io.BytesIO()
-                        tts.write_to_fp(fp)
-                        st.audio(fp, format="audio/mp3", autoplay=True)
+for i, msg in enumerate(st.session_state.messages):
+    avatar = "🌈" if msg["role"] == "assistant" else "⭐"
+    with st.chat_message(msg["role"], avatar=avatar):
+        c_txt, c_aud = st.columns([0.88, 0.12])
+        with c_txt:
+            st.markdown(msg["content"])
+        with c_aud:
+            if msg["role"] == "assistant":
+                if st.button("🔊", key=f"audio_{i}"):
+                    tts = gTTS(text=msg["content"], lang='fr')
+                    fp = io.BytesIO()
+                    tts.write_to_fp(fp)
+                    st.audio(fp, format="audio/mp3", autoplay=True)
 
-# --- ZONE RÉPONSE (Toujours en bas) ---
+# --- ZONE RÉPONSE (SCROLL EN BAS) ---
 if st.session_state.attente_reponse:
     st.write("---")
     c1, c2, c3 = st.columns(3)
@@ -100,18 +105,19 @@ if st.session_state.attente_reponse:
             Question : {st.session_state.messages[-2]['content']}
             Réponse choisie : {choix}
             - Si juste : commence par 'BRAVO'.
-            - Si faux : commence par 'ZUT'. Explique en 2 phrases MAX.
-            - Pose ensuite une nouvelle question QCM (A, B, C) avec une ligne vide entre chaque option."""
+            - Si faux : commence par 'ZUT'. Explique pourquoi en 2 phrases MAX.
+            - Pose ensuite une NOUVELLE QUESTION basée sur le cours avec A, B, C aérés."""
             
             res = model.generate_content(prompt_v)
             txt = res.text
             
-            # Détection ultra-souple des ballons
-            if "BRAVO" in txt.upper()[:15]:
+            # Système de ballons ultra-sensible (cherche "BRAVO" n'importe où au début)
+            if "BRAVO" in txt.upper()[:20]:
                 st.session_state.xp += 20
                 if activer_ballons:
                     st.balloons()
             
             st.session_state.messages.append({"role": "assistant", "content": txt})
             st.session_state.attente_reponse = True
-            st.rerun() # Le rerun recharge la page et place le curseur en bas
+            # Le rerun force l'affichage des nouveaux messages en bas de page
+            st.rerun()
