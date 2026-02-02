@@ -9,6 +9,7 @@ from google.api_core import exceptions
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 
+# CSS pour une interface douce et scannable
 st.markdown("""
     <style>
     .fixed-score {
@@ -17,80 +18,81 @@ st.markdown("""
         padding: 12px 20px; border-radius: 30px;
         font-weight: bold; z-index: 9999;
         box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
-        border: 2px solid white; font-size: 1.1em;
+        border: 2px solid white;
     }
-    .stButton>button { border-radius: 20px; font-weight: bold; height: 3.5em; }
+    .stButton>button { border-radius: 20px; font-weight: bold; height: 3em; }
+    .question-box { background-color: #f0f2f6; padding: 20px; border-radius: 15px; border-left: 5px solid #FF69B4; }
     </style>
 """, unsafe_allow_html=True)
 
-# Connexion API
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel(
-    model_name='models/gemini-2.0-flash',
-    system_instruction="Tu es le coach d'Anaïs (12 ans, TDAH). Tu es ultra-positif, encourageant, et tu fais des phrases courtes. Utilise des emojis. Ne pose qu'une seule question à la fois."
-)
+# Connexion API sécurisée
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel(
+        model_name='models/gemini-2.0-flash',
+        system_instruction="Tu es le coach d'Anaïs (12 ans, TDAH). Ton ton est joyeux, encourageant et très simple. Tu ne poses qu'UNE question QCM à la fois. Utilise des emojis comme ✨, 🌈, 🚀."
+    )
+except:
+    st.error("Clé API manquante ou invalide.")
 
 # --- INITIALISATION ---
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
-if "nb_questions" not in st.session_state: st.session_state.nb_questions = 0
-if "palier_atteint" not in st.session_state: st.session_state.palier_atteint = False
+if "nb_q" not in st.session_state: st.session_state.nb_q = 0
+if "recompense_prete" not in st.session_state: st.session_state.recompense_prete = False
 
-# --- SIDEBAR (RÉGLAGES) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("⚙️ Paramètres")
-    total_q = st.slider("Nombre de questions :", 1, 20, 10)
-    if st.button("🗑️ Recommencer une leçon"):
+    st.header("⚙️ Réglages")
+    max_q = st.slider("Nombre de questions :", 1, 20, 10)
+    if st.button("🔄 Changer de cours / Reset"):
         st.session_state.clear()
         st.rerun()
 
 st.markdown(f'<div class="fixed-score">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 st.title("✨ Le Coach d'Anaïs")
 
-# --- ETAPE 1 : CHARGEMENT DU COURS ---
+# --- 1. LECTURE DU COURS ---
 if not st.session_state.cours_texte:
-    st.write("### 📸 Prends ton cours en photo")
-    img_file = st.camera_input("Souris ! 📸") # Utilisation du mode caméra natif
-    if not img_file:
-        img_file = st.file_uploader("Ou télécharge une image", type=['jpg', 'png', 'jpeg'])
+    st.write("### 📸 Étape 1 : Prends ton cours")
+    img_input = st.camera_input("Prends une photo bien nette !")
+    if not img_input:
+        img_input = st.file_uploader("Ou choisis une image", type=['jpg', 'jpeg', 'png'])
 
-    if img_file and st.button("🚀 PRÉPARER LE QUIZZ"):
+    if img_input and st.button("🚀 C'EST PARTI !"):
         try:
-            with st.spinner("Je lis ton cours..."):
-                img = Image.open(img_file).convert("RGB")
-                # Optimisation : on réduit l'image avant envoi pour économiser
-                img.thumbnail((800, 800))
-                res = model.generate_content(["Extrais le texte de ce cours pour une élève de 6ème.", img])
+            with st.spinner("Je lis ton cours avec mes yeux de robot..."):
+                img = Image.open(img_input).convert("RGB")
+                img.thumbnail((1000, 1000)) # Réduction de l'image pour économiser les tokens
+                res = model.generate_content(["Extrais le texte de ce cours de 6ème de façon simple.", img])
                 st.session_state.cours_texte = res.text
                 st.rerun()
         except exceptions.ResourceExhausted:
-            st.error("Le coach est un peu fatigué (limite API). Attends une minute et réessaie ! ☕")
+            st.warning("Le coach fait une petite pause (limite API). Attends 30 secondes ! ☕")
 
-# --- ETAPE 2 : LE QUIZZ ---
-if st.session_state.cours_texte and st.session_state.nb_questions < total_q:
-    # Générer la première question si vide
+# --- 2. LE QUIZZ ---
+elif st.session_state.nb_q < max_q:
+    # Génération auto de la première question
     if not st.session_state.messages:
         try:
-            q = model.generate_content(f"Cours: {st.session_state.cours_texte}. Pose une question QCM (A, B, C) joyeuse.")
-            st.session_state.messages.append({"role": "assistant", "content": q.text})
-        except exceptions.ResourceExhausted:
-            st.warning("Minute papillon ! Le coach reprend son souffle... Réessaie dans 10 secondes.")
+            res = model.generate_content(f"Cours: {st.session_state.cours_texte}. Pose une première question QCM (A, B, C) joyeuse.")
+            st.session_state.messages.append({"role": "assistant", "content": res.text})
+        except: st.error("Oups, l'IA a eu un petit hoquet. Réessaie !")
 
-    # Affichage du chat
+    # Affichage
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
             st.markdown(msg["content"])
-            if msg["role"] == "assistant":
-                if st.button("🔊 Écouter", key=f"v_{i}"):
-                    clean = msg["content"].replace("A)", "Réponse A").replace("B)", "Réponse B").replace("C)", "Réponse C")
-                    tts = gTTS(text=clean, lang='fr', slow=False)
-                    fp = io.BytesIO()
-                    tts.write_to_fp(fp)
-                    st.audio(fp, format="audio/mp3", autoplay=True)
+            if msg["role"] == "assistant" and st.button("🔊 Écouter", key=f"audio_{i}"):
+                txt = msg["content"].replace("A)", "Choix A").replace("B)", "Choix B").replace("C)", "Choix C")
+                tts = gTTS(text=txt, lang='fr', slow=False) # slow=False pour plus de peps
+                fp = io.BytesIO()
+                tts.write_to_fp(fp)
+                st.audio(fp, format="audio/mp3", autoplay=True)
 
-    # Boutons de réponse
-    st.write(f"📊 Question {st.session_state.nb_questions + 1} sur {total_q}")
+    # Réponse
+    st.write(f"📊 Question {st.session_state.nb_q + 1} / {max_q}")
     c1, c2, c3 = st.columns(3)
     choix = None
     if c1.button("A", use_container_width=True): choix = "A"
@@ -98,38 +100,33 @@ if st.session_state.cours_texte and st.session_state.nb_questions < total_q:
     if c3.button("C", use_container_width=True): choix = "C"
 
     if choix:
-        st.session_state.nb_questions += 1
+        st.session_state.nb_q += 1
         try:
             with st.spinner("Vérification..."):
-                prompt = f"Cours: {st.session_state.cours_texte}. Question: {st.session_state.messages[-1]['content']}. Anaïs a dit {choix}. Juste ou faux ? Si juste, dis 'BRAVO'. Pose la question suivante."
+                prompt = f"Cours: {st.session_state.cours_texte}. Anaïs a répondu {choix} à la question : {st.session_state.messages[-1]['content']}. Si c'est juste, dis 'BRAVO !' et donne 20 XP. Pose la question suivante."
                 res = model.generate_content(prompt)
                 
-                if any(w in res.text.upper() for w in ["BRAVO", "CORRECT", "JUSTE"]):
+                if any(w in res.text.upper() for w in ["BRAVO", "JUSTE", "CORRECT"]):
                     st.balloons()
                     st.session_state.xp += 20
+                    if st.session_state.xp % 200 == 0:
+                        st.session_state.recompense_prete = True
                 
                 st.session_state.messages.append({"role": "user", "content": f"Ma réponse : {choix}"})
                 st.session_state.messages.append({"role": "assistant", "content": res.text})
-                
-                # Vérification du palier 200 XP
-                if st.session_state.xp >= 200 and not st.session_state.palier_atteint:
-                    st.session_state.palier_atteint = True
-                
                 st.rerun()
         except exceptions.ResourceExhausted:
-            st.error("Trop de questions d'un coup ! Attends 30 secondes, le coach se repose. 😊")
+            st.error("Le coach sature ! Attends un peu avant de cliquer. 😊")
 
-# --- RÉCOMPENSE ---
-if st.session_state.palier_atteint:
+# --- 3. RÉCOMPENSE & FIN ---
+if st.session_state.recompense_prete:
     st.snow()
-    st.success("### 🏆 INCROYABLE ! TU AS ATTEINT 200 XP !")
-    # Image aléatoire d'animal mignon pour la récompense
-    st.image("https://loremflickr.com/400/300/cute,puppy,kitten", caption="Voici ton cadeau, Anaïs ! Tu es une championne ! 🌟")
-    if st.button("Super ! Je continue"):
-        st.session_state.palier_atteint = False
+    st.success("### 🏆 PALIER ATTEINT ! 200 XP !")
+    # Image d'animal mignon (le tag 'cute,animal' change à chaque fois)
+    st.image(f"https://loremflickr.com/600/400/cute,animal?lock={st.session_state.xp}", caption="Tu es une véritable championne ! Voici ton cadeau !")
+    if st.button("Continuer l'aventure 🚀"):
+        st.session_state.recompense_prete = False
         st.rerun()
 
-# FIN DU QUIZZ
-if st.session_state.nb_questions >= total_q:
-    st.balloons()
-    st.info(f"🎯 Quiz terminé ! Tu as gagné {st.session_state.xp} XP aujourd'hui. Tu peux être fière de toi !")
+if st.session_state.nb_q >= max_q:
+    st.info("🎯 Séance terminée ! Bravo pour ton travail Anaïs. On se voit pour le prochain cours ?")
