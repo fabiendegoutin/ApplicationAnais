@@ -62,7 +62,7 @@ elif st.session_state.nb_q < 10:
         st.session_state.nb_q = 1
         prompt_init = (f"Cours : {st.session_state.cours_texte}. Commence par 'Question n°{st.session_state.nb_q}'. "
                       "NE DIS PAS 'selon le texte'. TRÈS IMPORTANT : Mets deux retours à la ligne "
-                      "entre chaque proposition A, B et C. Puis, APPRÈS la proposition C, mets 4 lignes vides "
+                      "entre chaque proposition A, B et C. Puis, APPRÈS la proposition C, mets 6 lignes vides "
                       "pour bien séparer de la suite.")
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
@@ -110,3 +110,4 @@ elif st.session_state.nb_q < 10:
 
 if st.session_state.xp >= 200:
     st.image("https://img.freepik.com/vecteurs-premium/embleme-medaille-or-laurier-insigne-champion-trophee-recompense_548887-133.jpg", width=100)
+
