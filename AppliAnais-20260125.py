@@ -33,14 +33,8 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "nb_q" not in st.session_state: st.session_state.nb_q = 0
 
-# Badge XP & Objectif Image à 200 XP
 st.markdown(f'<div class="fixed-header">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
-
 st.title("✨ Le Coach d'Anaïs")
-
-if st.session_state.xp >= 200:
-    st.success("🌟 BRAVO ! Tu es une championne !")
-    st.image("https://img.freepik.com/vecteurs-premium/embleme-medaille-or-laurier-insigne-champion-trophee-recompense_548887-133.jpg", width=150)
 
 # --- 1. LECTURE ---
 if not st.session_state.cours_texte:
@@ -65,8 +59,10 @@ elif st.session_state.nb_q < 10:
     st.progress(st.session_state.nb_q / 10)
 
     if not st.session_state.messages:
-        prompt_init = (f"Cours : {st.session_state.cours_texte}. Pose un QCM (A, B, C). "
-                      "NE DIS PAS 'selon le texte'. Mets CHAQUE proposition à la ligne.")
+        st.session_state.nb_q = 1
+        prompt_init = (f"Cours : {st.session_state.cours_texte}. Commence par 'Question n°{st.session_state.nb_q}'. "
+                      "NE DIS PAS 'selon le texte'. TRÈS IMPORTANT : Mets un double retour à la ligne "
+                      "entre chaque proposition A, B et C pour qu'elles soient bien séparées.")
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
         st.rerun()
@@ -81,12 +77,10 @@ elif st.session_state.nb_q < 10:
     if rep:
         st.session_state.nb_q += 1
         with st.spinner("Vérification..."):
-            # Prompt renforcé pour garder le contexte
             last_q = st.session_state.messages[0]["content"]
-            prompt_v = (f"Cours : {st.session_state.cours_texte}. La question posée était : {last_q}. "
-                       f"Anaïs a répondu : {rep}. Dis si c'est juste, explique pourquoi si besoin, "
-                       "puis pose la question suivante. NE DIS PAS 'selon le texte'. "
-                       "Mets CHAQUE choix (A, B, C) sur une nouvelle ligne.")
+            prompt_v = (f"Cours : {st.session_state.cours_texte}. Question posée : {last_q}. L'élève a dit {rep}. "
+                       f"Dis si c'est juste, puis commence la suite par 'Question n°{st.session_state.nb_q}'. "
+                       "NE DIS PAS 'selon le texte'. Force un double retour à la ligne avant A., B. et C.")
             res = model.generate_content(prompt_v)
             if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
                 st.session_state.xp += 20
@@ -98,14 +92,17 @@ elif st.session_state.nb_q < 10:
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
             if msg["role"] == "assistant":
-                col_audio, col_text = st.columns([0.15, 0.85])
+                col_text, col_audio = st.columns([0.85, 0.15])
+                with col_text:
+                    st.markdown(msg["content"])
                 with col_audio:
                     if st.button("🔊", key=f"v_{i}"):
                         tts = gTTS(text=msg["content"], lang='fr')
                         fp = io.BytesIO()
                         tts.write_to_fp(fp)
                         st.audio(fp, format="audio/mp3", autoplay=True)
-                with col_text:
-                    st.markdown(msg["content"])
             else:
                 st.markdown(msg["content"])
+
+if st.session_state.xp >= 200:
+    st.image("https://img.freepik.com/vecteurs-premium/embleme-medaille-or-laurier-insigne-champion-trophee-recompense_548887-133.jpg", width=100)
