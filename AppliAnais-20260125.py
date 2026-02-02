@@ -97,3 +97,4 @@ elif st.session_state.nb_q < 10:
                 tts.write_to_fp(fp)
                 st.audio(fp, format="audio/mp3", autoplay=True)
                 
+
