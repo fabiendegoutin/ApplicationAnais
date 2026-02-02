@@ -1,110 +1,97 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-from gtts import gTTS
-import io
 import time
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION VISUELLE ---
 st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 
-# CSS : Barre fixe et boutons
 st.markdown("""
     <style>
-    .fixed-header {
-        position: fixed; top: 50px; right: 15px; width: 150px;
-        background: #FF69B4; color: white; padding: 10px; border-radius: 20px;
-        font-weight: bold; z-index: 9999; text-align: center; border: 2px solid white;
+    /* Barre XP et Progression toujours visibles en haut */
+    .status-bar {
+        position: fixed; top: 10px; right: 10px; z-index: 1000;
+        background: white; padding: 10px; border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 2px solid #FF69B4;
     }
-    .stProgress > div > div > div > div { background-color: #FF69B4; }
-    div[data-testid="stHorizontalBlock"] button { border-radius: 15px !important; height: 3.5em !important; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(1) button { background-color: #4CAF50 !important; color: white !important; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(2) button { background-color: #2196F3 !important; color: white !important; }
-    div[data-testid="stHorizontalBlock"] > div:nth-child(3) button { background-color: #9C27B0 !important; color: white !important; }
+    /* Boutons de réponse colorés et larges */
+    div[data-testid="stHorizontalBlock"] button { height: 3.5em !important; font-weight: bold !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# Connexion API - Modèle 1.5 Flash (le plus stable pour les photos)
+# Connexion API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- INITIALISATION ---
+# Initialisation
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "nb_q" not in st.session_state: st.session_state.nb_q = 0
-if "bravo" not in st.session_state: st.session_state.bravo = False
 
-# Score fixe
-st.markdown(f'<div class="fixed-header">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
-
+# UI Fixe
+st.markdown(f'<div class="status-bar">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 st.title("✨ Le Coach d'Anaïs")
 
-# --- 1. LECTURE DU COURS ---
+# --- ETAPE 1 : LECTURE DU COURS ---
 if not st.session_state.cours_texte:
-    # Caméra ou Fichier selon l'appareil utilisé
-    source = st.camera_input("📸 Prends ton cours")
-    if not source:
-        source = st.file_uploader("📂 Ou choisis ta photo", type=['jpg', 'png'])
-
-    if source and st.button("🚀 LANCER LE QUIZZ"):
+    st.write("### 📸 Charge ton cours pour commencer")
+    # Utilisation d'un uploader simple pour plus de stabilité
+    photo = st.file_uploader("Choisis la photo du cahier", type=['jpg', 'jpeg', 'png'], key="uploader")
+    
+    if photo and st.button("🚀 LANCER LE QUIZZ"):
         try:
-            with st.spinner("Lecture du cours en cours..."):
-                img = Image.open(source).convert("RGB")
-                img.thumbnail((600, 600)) # Réduction pour éviter le crash API
+            with st.spinner("Lecture du cours manuscrit..."):
+                img = Image.open(photo).convert("RGB")
+                # On force une taille très petite pour ne jamais saturer l'API
+                img.thumbnail((500, 500)) 
                 
-                # On demande le texte et la 1ère question d'un coup
-                res = model.generate_content([
-                    "Tu es le coach d'Anaïs. Extrais le texte de ce cours de 6ème. "
-                    "Puis pose une première question QCM (A, B, C) avec des sauts de ligne.", 
-                    img
-                ])
-                st.session_state.cours_texte = res.text
-                st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
-                st.rerun()
-        except Exception:
-            st.error("Délai dépassé. Attends 5 secondes et réessaie, l'image est un peu lourde ! 😊")
+                # On demande le texte et la 1ère question en même temps
+                prompt = "Ceci est un cours de 6ème. Extrais le texte important et pose une question QCM (A, B, C)."
+                res = model.generate_content([prompt, img])
+                
+                if res.text:
+                    st.session_state.cours_texte = res.text
+                    st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
+                    st.rerun()
+        except Exception as e:
+            st.error("Le service Google est surchargé. Attends 10 secondes sans toucher à rien, puis reclique.")
+            time.sleep(5)
 
-# --- 2. LE QUIZZ (Ordre Inversé : Nouveau en haut) ---
+# --- ETAPE 2 : LE QUIZZ (NOUVEAU EN HAUT) ---
 elif st.session_state.nb_q < 10:
-    # Barre de progression fixe sous le titre
-    st.write(f"Question {st.session_state.nb_q} / 10")
+    st.write(f"**Progression : Question {st.session_state.nb_q} / 10**")
     st.progress(st.session_state.nb_q / 10)
 
-    st.write("### 🧩 Ta réponse :")
+    # Zone de boutons de réponse
+    st.write("### 🧩 Choisis ta réponse :")
     c1, c2, c3 = st.columns(3)
     rep = None
-    if c1.button("A", use_container_width=True): rep = "A"
-    if c2.button("B", use_container_width=True): rep = "B"
-    if c3.button("C", use_container_width=True): rep = "C"
+    if c1.button("A", use_container_width=True, key="A"): rep = "A"
+    if c2.button("B", use_container_width=True, key="B"): rep = "B"
+    if c3.button("C", use_container_width=True, key="C"): rep = "C"
 
     if rep:
-        st.session_state.nb_q += 1
-        with st.spinner("Vérification..."):
-            prompt = f"Cours: {st.session_state.cours_texte}. Réponse d'Anaïs: {rep}. Dis si c'est juste. Puis pose la question suivante."
-            res = model.generate_content(prompt)
-            if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
-                st.session_state.xp += 20
-                st.session_state.bravo = True
-            
-            st.session_state.messages.insert(0, {"role": "user", "content": f"Choix {rep}"})
-            st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
-            st.rerun()
-
-    if st.session_state.bravo:
-        st.balloons()
-        st.session_state.bravo = False
+        try:
+            st.session_state.nb_q += 1
+            with st.spinner("Vérification..."):
+                prompt_v = f"Cours: {st.session_state.cours_texte}. L'élève répond {rep}. Dis si c'est juste (BRAVO) et pose la question suivante."
+                res = model.generate_content(prompt_v)
+                
+                if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
+                    st.balloons()
+                    st.session_state.xp += 20
+                
+                # On insère au début pour que ça s'affiche en haut (pas de scroll)
+                st.session_state.messages.insert(0, {"role": "user", "content": f"Ma réponse : {rep}"})
+                st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
+                st.rerun()
+        except:
+            st.warning("Petite pause de l'IA... Patiente un instant.")
+            time.sleep(5)
 
     st.write("---")
-    for i, msg in enumerate(st.session_state.messages):
-        with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
-            st.markdown(msg["content"])
-            if msg["role"] == "assistant":
-                if st.button("🔊 Écouter", key=f"audio_{i}"):
-                    tts = gTTS(text=msg["content"], lang='fr')
-                    fp = io.BytesIO()
-                    tts.write_to_fp(fp)
-                    st.audio(fp, format="audio/mp3", autoplay=True)
-
-if st.session_state.nb_q >= 10:
-    st.success(f"🏆 Séance terminée ! Bravo Anaïs pour tes {st.session_state.xp} XP !")
+    # Affichage de l'historique (le plus récent en haut)
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
