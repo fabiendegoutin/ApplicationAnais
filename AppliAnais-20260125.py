@@ -9,24 +9,13 @@ st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 # Connexion API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# --- SYSTÈME DE SECOURS AUTOMATIQUE ---
-@st.cache_resource
-def get_working_model():
-    # Liste de noms à tester par ordre de stabilité
-    model_names = ['gemini-1.5-flash', 'models/gemini-1.5-flash', 'gemini-pro']
-    for name in model_names:
-        try:
-            m = genai.GenerativeModel(name)
-            # Test léger pour voir si le modèle répond
-            m.generate_content("test", generation_config={"max_output_tokens": 1})
-            return m
-        except:
-            continue
-    return genai.GenerativeModel('gemini-1.5-flash') # Repli par défaut
+# SOLUTION : Utiliser le nom court sans préfixe
+# Si 'gemini-1.5-flash' échoue, on essaiera 'gemini-pro'
+try:
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except:
+    model = genai.GenerativeModel('gemini-pro')
 
-model = get_working_model()
-
-# --- INITIALISATION ---
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "messages" not in st.session_state: st.session_state.messages = []
@@ -45,14 +34,18 @@ if not st.session_state.cours_texte:
             with st.spinner("Analyse du cours..."):
                 img = Image.open(photo).convert("RGB")
                 img.thumbnail((500, 500))
-                # Appel API
+                # Appel API sans fioritures
                 res = model.generate_content(["Extrais le texte de ce cours.", img])
                 if res.text:
                     st.session_state.cours_texte = res.text
                     st.rerun()
         except Exception as e:
-            st.error(f"Erreur de connexion : {e}")
-            st.info("Vérifie que ta clé API est correcte dans les secrets Streamlit.")
+            # Si ça échoue encore, on affiche la liste des modèles pour comprendre
+            st.error(f"Erreur : {e}")
+            if "404" in str(e):
+                st.write("Modèles disponibles sur ton compte :")
+                models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                st.code(models)
 
 # --- 2. LE QUIZZ ---
 elif len(st.session_state.messages) < 10:
@@ -79,7 +72,7 @@ elif len(st.session_state.messages) < 10:
             st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
             st.rerun()
         except:
-            st.warning("IA occupée, réessaie dans 5 secondes.")
+            st.warning("Patiente 5 secondes...")
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
