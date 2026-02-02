@@ -13,7 +13,7 @@ st.markdown("""
         position: fixed; top: 50px; right: 15px; width: 150px;
         background: linear-gradient(135deg, #FF69B4 0%, #DA70D6 100%);
         color: white; padding: 10px; border-radius: 20px;
-        z-index: 9999; text-align: center;
+        font-weight: bold; z-index: 9999; text-align: center;
         box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 2px solid white;
     }
     div[data-testid="stHorizontalBlock"] button {
@@ -60,10 +60,12 @@ elif st.session_state.nb_q < 10:
 
     if not st.session_state.messages:
         st.session_state.nb_q = 1
-        prompt_init = (f"Cours : {st.session_state.cours_texte}. Commence par 'Question n°{st.session_state.nb_q}'. "
-                      "NE DIS PAS 'selon le texte'. TRÈS IMPORTANT : Mets deux retours à la ligne "
-                      "entre chaque proposition A, B et C. Puis, APPRÈS la proposition C, mets 6 lignes vides "
-                      "pour bien séparer de la suite.")
+        prompt_init = (f"Cours : {st.session_state.cours_texte}. ORDRE CRITIQUE : "
+                      f"1. Écris 'Question n°{st.session_state.nb_q}'. "
+                      "2. Pose la question clairement. "
+                      "3. Saute deux lignes. "
+                      "4. Écris les choix A, B, C avec deux sauts de ligne entre chaque. "
+                      "5. Finis par 5 sauts de ligne.")
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
         st.rerun()
@@ -78,11 +80,13 @@ elif st.session_state.nb_q < 10:
     if rep:
         st.session_state.nb_q += 1
         with st.spinner("Vérification..."):
-            last_q = st.session_state.messages[0]["content"]
-            prompt_v = (f"Cours : {st.session_state.cours_texte}. Question posée : {last_q}. L'élève a dit {rep}. "
-                       f"Dis si c'est juste, puis commence la suite par 'Question n°{st.session_state.nb_q}'. "
-                       "NE DIS PAS 'selon le texte'. Force deux retours à la ligne entre A, B et C, "
-                       "et ajoute 4 lignes vides tout à la fin de ton message.")
+            last_msg = st.session_state.messages[0]["content"]
+            prompt_v = (f"Cours : {st.session_state.cours_texte}. Question précédente : {last_msg}. "
+                       f"Réponse d'Anaïs : {rep}. Dis si c'est juste, explique, puis : "
+                       f"ORDRE CRITIQUE : 1. Écris 'Question n°{st.session_state.nb_q}'. "
+                       "2. Pose l'énoncé de la nouvelle question. "
+                       "3. Saute deux lignes. 4. Écris les choix A, B, C avec deux sauts de ligne. "
+                       "5. Finis par 5 sauts de ligne.")
             res = model.generate_content(prompt_v)
             if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
                 st.session_state.xp += 20
@@ -91,7 +95,7 @@ elif st.session_state.nb_q < 10:
             st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
             st.rerun()
 
-    # Affichage des messages avec séparateur
+    # Affichage
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
             if msg["role"] == "assistant":
@@ -106,8 +110,7 @@ elif st.session_state.nb_q < 10:
                         st.audio(fp, format="audio/mp3", autoplay=True)
             else:
                 st.markdown(msg["content"])
-        st.markdown("---") # Ligne de séparation entre chaque bloc d'échange
+        st.markdown("<br><hr><br>", unsafe_allow_html=True) # Séparateur visuel fort
 
 if st.session_state.xp >= 200:
     st.image("https://img.freepik.com/vecteurs-premium/embleme-medaille-or-laurier-insigne-champion-trophee-recompense_548887-133.jpg", width=100)
-
