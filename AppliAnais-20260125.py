@@ -9,12 +9,9 @@ st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 # Connexion API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# SOLUTION : Utiliser le nom court sans préfixe
-# Si 'gemini-1.5-flash' échoue, on essaiera 'gemini-pro'
-try:
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except:
-    model = genai.GenerativeModel('gemini-pro')
+# LE MODÈLE DÉTECTÉ SUR VOTRE COMPTE :
+MODEL_NAME = 'models/gemini-2.5-flash'
+model = genai.GenerativeModel(MODEL_NAME)
 
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
@@ -31,28 +28,26 @@ if not st.session_state.cours_texte:
 
     if photo and st.button("🚀 LANCER LE QUIZZ"):
         try:
-            with st.spinner("Analyse du cours..."):
+            with st.spinner("Analyse avec Gemini 2.5..."):
                 img = Image.open(photo).convert("RGB")
-                img.thumbnail((500, 500))
-                # Appel API sans fioritures
-                res = model.generate_content(["Extrais le texte de ce cours.", img])
+                img.thumbnail((600, 600))
+                
+                # Appel API avec le nouveau modèle
+                res = model.generate_content(["Extrais le texte de ce cours de 6ème.", img])
                 if res.text:
                     st.session_state.cours_texte = res.text
+                    st.success("Cours chargé avec succès !")
                     st.rerun()
         except Exception as e:
-            # Si ça échoue encore, on affiche la liste des modèles pour comprendre
             st.error(f"Erreur : {e}")
-            if "404" in str(e):
-                st.write("Modèles disponibles sur ton compte :")
-                models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                st.code(models)
 
 # --- 2. LE QUIZZ ---
 elif len(st.session_state.messages) < 10:
     if not st.session_state.messages:
-        q = model.generate_content(f"Cours : {st.session_state.cours_texte}. Pose un QCM (A, B, C).")
-        st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
-        st.rerun()
+        with st.spinner("Génération de la question..."):
+            q = model.generate_content(f"Cours : {st.session_state.cours_texte}. Pose un QCM (A, B, C).")
+            st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
+            st.rerun()
 
     st.write("### 🧩 Ta réponse :")
     c1, c2, c3 = st.columns(3)
@@ -63,16 +58,18 @@ elif len(st.session_state.messages) < 10:
 
     if rep:
         try:
-            prompt = f"Cours : {st.session_state.cours_texte}. Réponse : {rep}. Dis si c'est juste, puis nouvelle question."
-            res = model.generate_content(prompt)
-            if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
-                st.session_state.xp += 20
-                st.balloons()
-            st.session_state.messages.insert(0, {"role": "user", "content": f"Choix {rep}"})
-            st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
-            st.rerun()
-        except:
-            st.warning("Patiente 5 secondes...")
+            with st.spinner("Vérification..."):
+                prompt = f"Cours : {st.session_state.cours_texte}. Réponse : {rep}. Dis si c'est juste, puis nouvelle question."
+                res = model.generate_content(prompt)
+                if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
+                    st.session_state.xp += 20
+                    st.balloons()
+                st.session_state.messages.insert(0, {"role": "user", "content": f"Choix {rep}"})
+                st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
+                st.rerun()
+        except Exception as e:
+            st.warning("IA très sollicitée, attends 3 secondes...")
+            time.sleep(3)
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
