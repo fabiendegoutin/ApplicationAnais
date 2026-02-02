@@ -6,22 +6,35 @@ import time
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Le Coach d'Anaïs 🌟", layout="centered")
 
-# Connexion API avec le nom de modèle "Latest"
+# Connexion API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# Utilisation du nom complet requis par l'API v1beta
-model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+# --- SYSTÈME DE SECOURS AUTOMATIQUE ---
+@st.cache_resource
+def get_working_model():
+    # Liste de noms à tester par ordre de stabilité
+    model_names = ['gemini-1.5-flash', 'models/gemini-1.5-flash', 'gemini-pro']
+    for name in model_names:
+        try:
+            m = genai.GenerativeModel(name)
+            # Test léger pour voir si le modèle répond
+            m.generate_content("test", generation_config={"max_output_tokens": 1})
+            return m
+        except:
+            continue
+    return genai.GenerativeModel('gemini-1.5-flash') # Repli par défaut
 
+model = get_working_model()
+
+# --- INITIALISATION ---
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "messages" not in st.session_state: st.session_state.messages = []
 
-# Score affiché proprement
-st.sidebar.title(f"🚀 Score : {st.session_state.xp} XP")
-
+st.sidebar.metric("XP 🚀", st.session_state.xp)
 st.title("✨ Le Coach d'Anaïs")
 
-# --- ÉTAPE 1 : LECTURE ---
+# --- 1. LECTURE DU COURS ---
 if not st.session_state.cours_texte:
     photo = st.camera_input("📸 Prends ton cours")
     if not photo:
@@ -29,26 +42,20 @@ if not st.session_state.cours_texte:
 
     if photo and st.button("🚀 LANCER LE QUIZZ"):
         try:
-            with st.spinner("Le coach déchiffre ton écriture..."):
+            with st.spinner("Analyse du cours..."):
                 img = Image.open(photo).convert("RGB")
-                img.thumbnail((600, 600))
-                
-                # Premier appel pour extraire le texte
-                res = model.generate_content(["Extrais le texte de ce cours de 6ème.", img])
-                
+                img.thumbnail((500, 500))
+                # Appel API
+                res = model.generate_content(["Extrais le texte de ce cours.", img])
                 if res.text:
                     st.session_state.cours_texte = res.text
-                    st.success("C'est bon ! Le quizz commence.")
-                    time.sleep(1)
                     st.rerun()
         except Exception as e:
-            # Affichage de l'erreur réelle pour nous aider si ça persiste
-            st.error(f"Détail technique : {e}")
-            st.info("💡 Conseil : Vérifie que ta clé API est bien valide dans les Secrets.")
+            st.error(f"Erreur de connexion : {e}")
+            st.info("Vérifie que ta clé API est correcte dans les secrets Streamlit.")
 
-# --- ÉTAPE 2 : QUIZZ ---
+# --- 2. LE QUIZZ ---
 elif len(st.session_state.messages) < 10:
-    # Génération de la question
     if not st.session_state.messages:
         q = model.generate_content(f"Cours : {st.session_state.cours_texte}. Pose un QCM (A, B, C).")
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
@@ -62,15 +69,17 @@ elif len(st.session_state.messages) < 10:
     if c3.button("C", use_container_width=True): rep = "C"
 
     if rep:
-        with st.spinner("Vérification..."):
-            prompt = f"Cours : {st.session_state.cours_texte}. Réponse : {rep}. Bravo si juste, puis nouvelle question."
+        try:
+            prompt = f"Cours : {st.session_state.cours_texte}. Réponse : {rep}. Dis si c'est juste, puis nouvelle question."
             res = model.generate_content(prompt)
-            if "BRAVO" in res.text.upper():
+            if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
                 st.session_state.xp += 20
                 st.balloons()
             st.session_state.messages.insert(0, {"role": "user", "content": f"Choix {rep}"})
             st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
             st.rerun()
+        except:
+            st.warning("IA occupée, réessaie dans 5 secondes.")
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
