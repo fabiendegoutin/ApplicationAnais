@@ -3,7 +3,6 @@ import google.generativeai as genai
 from PIL import Image
 from gtts import gTTS
 import io
-import time
 from google.api_core import exceptions
 
 # --- CONFIGURATION STYLE ---
@@ -28,58 +27,66 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Connexion API
+# Connexion API - Version avec secours automatique
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel(
-    model_name='models/gemini-1.5-flash', # Plus stable pour le quota gratuit
-    system_instruction="Tu es le coach d'Anaïs. Pose uniquement des QCM (A, B, C) basés sur le texte. Saute une ligne entre chaque choix."
-)
+
+def get_model():
+    # On essaie le modèle le plus rapide et stable
+    try:
+        return genai.GenerativeModel('gemini-1.5-flash')
+    except:
+        # Secours si le premier est "NotFound"
+        return genai.GenerativeModel('gemini-pro')
+
+model = get_model()
 
 # --- INITIALISATION ---
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "nb_q" not in st.session_state: st.session_state.nb_q = 0
-if "lancer_ballons" not in st.session_state: st.session_state.lancer_ballons = False
+if "bravo_ballons" not in st.session_state: st.session_state.bravo_ballons = False
 
 with st.sidebar:
+    st.header("⚙️ Réglages")
     total_q = st.slider("Objectif questions", 1, 20, 10)
-    if st.button("🔄 Reset"):
+    if st.button("🔄 Recommencer tout"):
         st.session_state.clear()
         st.rerun()
 
-# HEADER FIXE
 st.markdown(f'<div class="fixed-header">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 st.title("✨ Le Coach d'Anaïs")
 
-# --- 1. CHARGEMENT (AVEC SÉCURITÉ) ---
+# --- 1. CHARGEMENT DU COURS ---
 if not st.session_state.cours_texte:
-    img_cam = st.camera_input("📸 Prends ton cours")
-    img_file = st.file_uploader("📂 Ou choisis une photo", type=['jpg', 'png'])
+    st.write("### 📸 Étape 1 : Ton cours")
+    img_cam = st.camera_input("Prends une photo")
+    img_file = st.file_uploader("Ou choisis une photo", type=['jpg', 'png'])
     photo = img_cam if img_cam else img_file
 
     if photo and st.button("🚀 LANCER LE QUIZZ"):
         try:
-            with st.spinner("Analyse du cours..."):
+            with st.spinner("Lecture du cours..."):
                 img = Image.open(photo).convert("RGB")
-                img.thumbnail((800, 800)) # Réduit la charge
-                res = model.generate_content(["Extrais le texte de ce cours.", img])
+                img.thumbnail((800, 800))
+                # Instruction système intégrée pour éviter le hors-sujet
+                instr = "Tu es le coach d'Anaïs. Extrais le contenu de ce cours de 6ème simplement."
+                res = model.generate_content([instr, img])
                 st.session_state.cours_texte = res.text
                 
-                # Première question
-                q = model.generate_content(f"Cours: {st.session_state.cours_texte}. Pose une question QCM.")
+                # Première question QCM bien aérée
+                q = model.generate_content(f"Cours: {st.session_state.cours_texte}. Pose une question QCM (A, B, C) avec une ligne vide entre les choix.")
                 st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
                 st.rerun()
-        except exceptions.ResourceExhausted:
-            st.error("⚠️ Le coach reprend son souffle ! Attends 15 secondes et reclique sur le bouton. 😊")
+        except Exception as e:
+            st.error("Le coach a un petit souci technique. Attends 10 secondes et réessaie ! 😊")
 
-# --- 2. LE QUIZZ (ORDRE INVERSÉ) ---
+# --- 2. LE QUIZZ (ORDRE INVERSÉ POUR LE SCROLL) ---
 elif st.session_state.nb_q < total_q:
-    # Barre de progression fixe sous le titre
     st.write(f"Question {st.session_state.nb_q} / {total_q}")
     st.progress(st.session_state.nb_q / total_q)
 
-    # Zone de réponse TOUJOURS EN HAUT
+    # Zone de réponse en haut
     st.write("### 🧩 Ta réponse :")
     c1, c2, c3 = st.columns(3)
     rep = None
@@ -91,34 +98,34 @@ elif st.session_state.nb_q < total_q:
         try:
             st.session_state.nb_q += 1
             with st.spinner("Vérification..."):
-                prompt = f"Cours: {st.session_state.cours_texte}. Question: {st.session_state.messages[0]['content']}. Réponse: {rep}. Dis BRAVO si juste. Pose la question QCM suivante."
+                prompt = f"Cours: {st.session_state.cours_texte}. Question: {st.session_state.messages[0]['content']}. Anaïs répond {rep}. Dis BRAVO si juste. Pose la question QCM suivante."
                 res = model.generate_content(prompt)
                 
                 if any(w in res.text.upper() for w in ["BRAVO", "JUSTE", "CORRECT"]):
                     st.session_state.xp += 20
-                    st.session_state.lancer_ballons = True
+                    st.session_state.bravo_ballons = True
                 
                 st.session_state.messages.insert(0, {"role": "user", "content": f"Ma réponse : {rep}"})
                 st.session_state.messages.insert(0, {"role": "assistant", "content": res.text})
                 st.rerun()
-        except exceptions.ResourceExhausted:
-            st.warning("⏱️ Trop vite ! Attends 10 secondes, le coach arrive !")
-            st.session_state.nb_q -= 1 # On ne compte pas la question si erreur
+        except:
+            st.warning("⚠️ Trop rapide ! Attends 5 secondes.")
+            st.session_state.nb_q -= 1
 
-    if st.session_state.lancer_ballons:
+    if st.session_state.bravo_ballons:
         st.balloons()
-        st.session_state.lancer_ballons = False
+        st.session_state.bravo_ballons = False
 
     st.write("---")
-    # Affichage du chat (récent en haut)
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"], avatar="🌈" if msg["role"]=="assistant" else "⭐"):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and st.button("🔊 Écouter", key=f"v_{i}"):
-                tts = gTTS(text=msg["content"], lang='fr')
+                clean = msg["content"].replace("A)", "Réponse A,").replace("B)", "Réponse B,").replace("C)", "Réponse C,")
+                tts = gTTS(text=clean, lang='fr')
                 fp = io.BytesIO()
                 tts.write_to_fp(fp)
                 st.audio(fp, format="audio/mp3", autoplay=True)
 
 if st.session_state.nb_q >= total_q:
-    st.success(f"🏆 Bravo Anaïs ! Tu as gagné {st.session_state.xp} XP !")
+    st.success(f"🏆 Séance finie ! Bravo Anaïs pour tes {st.session_state.xp} XP !")
