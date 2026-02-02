@@ -13,10 +13,9 @@ st.markdown("""
         position: fixed; top: 50px; right: 15px; width: 150px;
         background: linear-gradient(135deg, #FF69B4 0%, #DA70D6 100%);
         color: white; padding: 10px; border-radius: 20px;
-        z-index: 9999; text-align: center;
+        font-weight: bold; z-index: 9999; text-align: center;
         box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 2px solid white;
     }
-    .stProgress > div > div > div > div { background-color: #FFD700 !important; }
     div[data-testid="stHorizontalBlock"] button {
         border-radius: 15px !important; height: 3.5em !important; font-weight: bold !important;
     }
@@ -34,23 +33,16 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "cours_texte" not in st.session_state: st.session_state.cours_texte = None
 if "nb_q" not in st.session_state: st.session_state.nb_q = 0
 
-# UI Fixe : XP + Barre de progression juste en dessous
-with st.container():
-    st.markdown(f'''
-        <div class="fixed-header">
-            🚀 {st.session_state.xp} XP<br>
-            <small>Objectif 200</small>
-        </div>
-    ''', unsafe_allow_html=True)
+# Badge XP & Objectif Image à 200 XP
+st.markdown(f'<div class="fixed-header">🚀 {st.session_state.xp} XP</div>', unsafe_allow_html=True)
 
 st.title("✨ Le Coach d'Anaïs")
 
-# --- RÉCOMPENSE 200 XP ---
 if st.session_state.xp >= 200:
-    st.success("🌟 INCROYABLE ! Tu as atteint 200 XP !")
-    st.image("https://img.freepik.com/vecteurs-premium/embleme-medaille-or-laurier-insigne-champion-trophee-recompense_548887-133.jpg", width=200)
+    st.success("🌟 BRAVO ! Tu es une championne !")
+    st.image("https://img.freepik.com/vecteurs-premium/embleme-medaille-or-laurier-insigne-champion-trophee-recompense_548887-133.jpg", width=150)
 
-# --- 1. CHARGEMENT ---
+# --- 1. LECTURE ---
 if not st.session_state.cours_texte:
     photo = st.camera_input("📸 Prends ton cours")
     if not photo:
@@ -61,21 +53,20 @@ if not st.session_state.cours_texte:
             with st.spinner("Lecture du cours..."):
                 img = Image.open(photo).convert("RGB")
                 img.thumbnail((600, 600))
-                res = model.generate_content(["Extrais le texte de ce cours de 6ème.", img])
+                res = model.generate_content(["Extrais le texte de ce cours.", img])
                 st.session_state.cours_texte = res.text
                 st.rerun()
         except Exception as e:
             st.error(f"Erreur : {e}")
 
-# --- 2. LE QUIZZ ---
+# --- 2. QUIZZ ---
 elif st.session_state.nb_q < 10:
-    # Barre de progression globale en haut de la zone de jeu
-    st.write(f"Avancement de la séance : {st.session_state.nb_q}/10")
+    st.write(f"Question {st.session_state.nb_q}/10")
     st.progress(st.session_state.nb_q / 10)
 
     if not st.session_state.messages:
         prompt_init = (f"Cours : {st.session_state.cours_texte}. Pose un QCM (A, B, C). "
-                      "NE DIS JAMAIS 'selon le texte'. Mets CHAQUE choix à la ligne.")
+                      "NE DIS PAS 'selon le texte'. Mets CHAQUE proposition à la ligne.")
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
         st.rerun()
@@ -90,9 +81,12 @@ elif st.session_state.nb_q < 10:
     if rep:
         st.session_state.nb_q += 1
         with st.spinner("Vérification..."):
-            prompt_v = (f"Cours : {st.session_state.cours_texte}. Réponse d'Anaïs : {rep}. "
-                       "Dis si c'est juste, puis pose la question suivante (SANS 'selon le texte' "
-                       "et avec les choix à la ligne).")
+            # Prompt renforcé pour garder le contexte
+            last_q = st.session_state.messages[0]["content"]
+            prompt_v = (f"Cours : {st.session_state.cours_texte}. La question posée était : {last_q}. "
+                       f"Anaïs a répondu : {rep}. Dis si c'est juste, explique pourquoi si besoin, "
+                       "puis pose la question suivante. NE DIS PAS 'selon le texte'. "
+                       "Mets CHAQUE choix (A, B, C) sur une nouvelle ligne.")
             res = model.generate_content(prompt_v)
             if "BRAVO" in res.text.upper() or "JUSTE" in res.text.upper():
                 st.session_state.xp += 20
