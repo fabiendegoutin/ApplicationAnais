@@ -66,14 +66,14 @@ elif st.session_state.nb_q < 10:
 
     if not st.session_state.messages:
         st.session_state.nb_q = 1
-        num_q = st.session_state.nb_q + 1
+        num_q = st.session_state.nb_q
         prompt_init = (f"Tu es le coach personnel d'Anaïs. Voici son cours : {st.session_state.cours_texte}. "
                       "Instructions : "
                       "1. Adresse-toi TOUJOURS directement à elle (dis 'tu'). "
                       "2. Ne mentionne jamais 'le texte' ou 'selon le cours'. "
                       "3. Pose une question sur le contenu. "
                       f"4. Écris impérativement : 'Question n°{num_q}'. "
-                      "5. Présente les choix A, B et C en allant à la LIGNE pour chaque choix.")   
+                      "5. Présente les choix A, B et C PASSE UN LIGNE entre chaque choix.")   
         
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
@@ -130,6 +130,7 @@ if st.session_state.nb_q >= 10:
     if st.button("Recommencer"):
         for key in st.session_state.keys(): del st.session_state[key]
         st.rerun()
+
 
 
 
