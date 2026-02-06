@@ -27,7 +27,7 @@ st.markdown("""
 
 # Configuration API (Vérifiez bien votre secret GEMINI_API_KEY)
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash') # Mise à jour vers un modèle stable
+model = genai.GenerativeModel('models/gemini-2.5-flash') # Mise à jour vers un modèle stable
 
 if "xp" not in st.session_state: st.session_state.xp = 0
 if "messages" not in st.session_state: st.session_state.messages = []
@@ -128,4 +128,5 @@ if st.session_state.nb_q >= 10:
     if st.button("Recommencer"):
         for key in st.session_state.keys(): del st.session_state[key]
         st.rerun()
+
 
