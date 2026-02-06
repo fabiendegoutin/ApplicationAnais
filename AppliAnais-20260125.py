@@ -72,7 +72,7 @@ elif st.session_state.nb_q < 10:
                       "2. Ne mentionne jamais 'le texte' ou 'selon le cours'. "
                       "3. Pose une question sur le contenu. "
                       "4. Écris 'Question n°1'. "
-                      "5. Propose 3 choix (A, B, C).")
+                      "5. Propose 3 choix (A, B, C) en passant une ligne entre chaque choix")
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
         st.rerun()
@@ -128,5 +128,6 @@ if st.session_state.nb_q >= 10:
     if st.button("Recommencer"):
         for key in st.session_state.keys(): del st.session_state[key]
         st.rerun()
+
 
 
