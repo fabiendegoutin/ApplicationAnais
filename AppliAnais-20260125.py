@@ -71,8 +71,9 @@ elif st.session_state.nb_q < 10:
                       "1. Adresse-toi TOUJOURS directement à elle (dis 'tu'). "
                       "2. Ne mentionne jamais 'le texte' ou 'selon le cours'. "
                       "3. Pose une question sur le contenu. "
-                      f"4. Écris 'Question n°{st.session_state.nb_q + 1}'. "
-                      "5. Propose 3 choix en passant une ligne entre chaque choix (A, B, C).")
+                      f"4. Écris impérativement : 'Question n°{st.session_state.nb_q + 1}'. "
+                      "5. Présente les choix A, B et C en allant à la ligne pour chaque choix.")   
+        
         q = model.generate_content(prompt_init)
         st.session_state.messages.insert(0, {"role": "assistant", "content": q.text})
         st.rerun()
